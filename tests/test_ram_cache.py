@@ -1,4 +1,4 @@
-"""Tests for the RAM cache: LRU eviction, byte budget, and socket round-trip."""
+"""Tests for the RAM cache: SIEVE/LRU eviction, byte budget, and socket round-trip."""
 
 import threading
 
@@ -18,7 +18,7 @@ def test_get_put_hit_miss():
     assert s.entries == 1
 
 
-def test_lru_eviction_by_entries():
+def test_visited_entry_survives_eviction():
     c = RamCache(max_entries=2, max_bytes=1_000_000)
     c.put("a", b"1")
     c.put("b", b"2")
@@ -28,6 +28,43 @@ def test_lru_eviction_by_entries():
     assert c.get("c") == b"3"
     assert c.get("b") is None
     assert c.stats().evictions == 1
+
+
+def test_default_policy_is_sieve():
+    assert RamCache().stats().policy == "sieve"
+
+
+def test_lru_policy_evicts_least_recently_used():
+    c = RamCache(max_entries=2, max_bytes=1_000_000, policy="lru")
+    c.put("a", b"1")
+    c.put("b", b"2")
+    c.get("a")
+    c.put("c", b"3")
+    assert c.get("a") == b"1"
+    assert c.get("b") is None
+    assert c.stats().policy == "lru"
+
+
+def test_sieve_protects_visited_over_newcomer():
+    c = RamCache(max_entries=2, max_bytes=1_000_000)
+    c.put("hot", b"H")
+    c.get("hot")
+    c.put("cold1", b"1")
+    c.put("cold2", b"2")
+    assert c.get("hot") == b"H"
+    assert c.get("cold1") is None
+
+    lru = RamCache(max_entries=2, max_bytes=1_000_000, policy="lru")
+    lru.put("hot", b"H")
+    lru.get("hot")
+    lru.put("cold1", b"1")
+    lru.put("cold2", b"2")
+    assert lru.get("hot") is None
+
+
+def test_reject_unknown_policy():
+    with pytest.raises(ValueError):
+        RamCache(policy="clock")
 
 
 def test_byte_budget_eviction():
