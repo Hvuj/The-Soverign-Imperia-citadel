@@ -18,11 +18,11 @@ jobs:
     steps:
       # Step 1: Checkout repository
       - name: Checkout Repository Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v4.4.0
 
       # Step 2: Install uv
       - name: Set up uv
-        uses: astral-sh/setup-uv@v8.3.0
+        uses: astral-sh/setup-uv@v8.3.2
         with:
           enable-cache: false
 
