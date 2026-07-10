@@ -2,26 +2,35 @@ name: Continuous Integration
 
 on:
   push:
-    branches: [ main, master ]
+    branches:
+      - main
+      - master
+      - "**"
   pull_request:
-    branches: [ main, master ]
+    branches:
+      - main
+      - master
 
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
 
     steps:
-      # Step 1: Clone the repository code
+      # Step 1: Checkout repository
       - name: Checkout Repository Code
         uses: actions/checkout@v4
 
-      # Step 2: Provision uv (Upgraded to v8.3.0 clean semantic tag)
+      # Step 2: Install uv
       - name: Set up uv
         uses: astral-sh/setup-uv@v8.3.0
         with:
-          enable-cache: false 
+          enable-cache: false
 
-      # Step 3: Explicitly cache the virtual environment directories (Upgraded to v5)
+      # Step 3: Install the project's Python version
+      - name: Set Up Python
+        run: uv python install
+
+      # Step 4: Cache the virtual environment and uv package cache
       - name: Cache Virtual Environment and uv Store
         id: cache-venv
         uses: actions/cache@v5
@@ -30,27 +39,24 @@ jobs:
             .venv
             ~/.cache/uv
             ~/.local/share/uv
-          key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
+          key: >
+            uv-${{ github.repository }}-${{ github.ref_name }}-${{ runner.os }}-${{
+            hashFiles('uv.lock', 'pyproject.toml') }}
           restore-keys: |
-            uv-${{ runner.os }}-
+            uv-${{ github.repository }}-${{ github.ref_name }}-${{ runner.os }}-
+            uv-${{ github.repository }}-
 
-      # Step 4: Provision Python runtime
-      - name: Set up Python
-        run: uv python install
-
-      # Step 5: Install dependencies (Strict replication of the user's pushed environment)
-      # Rebuilds the venv ONLY on a cache miss, relying entirely on the frozen lockfile.
+      # Step 5: Synchronize the environment from the lockfile.
+      # Safe to run every time; uv only installs what's missing.
       - name: Install Dependencies from Lockfile
-        if: steps.cache-venv.outputs.cache-hit != 'true'
         run: uv sync --frozen
 
-      # Step 6: Verify pyproject.toml matches uv.lock
-      # This step fails the CI if the user changed pyproject.toml but forgot to run 'uv lock' locally.
+      # Step 6: Ensure pyproject.toml and uv.lock are in sync
       - name: Check if Lockfile is Out of Date
         run: |
           echo "Verifying that pyproject.toml matches the committed uv.lock file..."
           uv lock --check
 
-      # Step 7: Run tests inside the strictly replicated workspace
+      # Step 7: Run the test suite
       - name: Run Test Suite
         run: uv run --frozen pytest tests/
