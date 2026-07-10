@@ -1,0 +1,91 @@
+﻿{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "ask-response.schema.json",
+  "title": "AskCitadelResponse",
+  "description": "Schema for all /api/ask responses from Citadel.",
+  "type": "object",
+  "required": [
+    "answer",
+    "source",
+    "confidence",
+    "category",
+    "evidence",
+    "assumptions",
+    "missing_evidence",
+    "warnings",
+    "model_fallback_used",
+    "local_context_used",
+    "claim_verification",
+    "suggested_questions"
+  ],
+  "properties": {
+    "answer": {
+      "type": "string",
+      "description": "Human-readable answer text."
+    },
+    "source": {
+      "type": "string",
+      "enum": ["local", "local_plus_claude", "claude_fallback", "unavailable"],
+      "description": "Where the answer came from."
+    },
+    "confidence": {
+      "type": "string",
+      "enum": ["high", "medium", "low"],
+      "description": "Confidence level of the answer."
+    },
+    "category": {
+      "type": "string",
+      "description": "Question category (skills, agents, workspace, health, etc.)."
+    },
+    "evidence": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Evidence sources used to construct the answer."
+    },
+    "assumptions": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Assumptions made when evidence was incomplete."
+    },
+    "missing_evidence": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Evidence that was sought but not found."
+    },
+    "warnings": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Warnings about answer quality or freshness."
+    },
+    "model_fallback_used": {
+      "type": "boolean",
+      "description": "True if a model fallback was invoked to generate this answer."
+    },
+    "local_context_used": {
+      "type": "boolean",
+      "description": "True if local indexes/files were used as primary context."
+    },
+    "claim_verification": {
+      "type": "object",
+      "required": ["enabled", "unsupported_claims_removed"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "unsupported_claims_removed": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "suggested_questions": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Follow-up questions the user might ask."
+    },
+    "error": {
+      "type": "string",
+      "description": "Present only on error responses."
+    },
+    "refusal": {
+      "type": "string",
+      "description": "Present only when request was refused (forbidden action, prompt leak, etc.)."
+    }
+  },
+  "additionalProperties": false
+}

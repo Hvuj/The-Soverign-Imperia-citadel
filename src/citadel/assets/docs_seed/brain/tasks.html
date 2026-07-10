@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Sovereign Imperia Citadel Z Task Cockpit</title>
+<style>
+/* ------------------------------------------------------------------ */
+/* The Sovereign Imperia Citadel Z Task Cockpit — shares the graph.css/workspace.css    */
+/* design-token system (same palette, same signature) for one visual  */
+/* identity across the whole UI, at the tighter density a task table  */
+/* needs.                                                              */
+/* ------------------------------------------------------------------ */
+:root {
+  --bg: #030611;
+  --panel: rgba(6, 12, 28, 0.96);
+  --panel-raised: rgba(11, 20, 42, 0.74);
+  --border: rgba(92, 225, 255, 0.15);
+  --border-strong: rgba(92, 225, 255, 0.36);
+  --text: #e7f3ff;
+  --muted: #89a2bd;
+  --faint: #536579;
+  --cyan: #24d7ff;
+  --violet: #a78bfa;
+  --green: #36d399;
+  --yellow: #fbbf24;
+  --red: #fb7185;
+  --blue: #38bdf8;
+  --shadow: 0 8px 32px rgba(0,0,0,0.40), 0 0 20px rgba(36,215,255,0.06);
+  --radius: 10px;
+  --radius-sm: 6px;
+  --radius-pill: 999px;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: var(--cyan); }
+
+button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, a:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(36,215,255,0.18), 0 0 0 1px var(--cyan) inset;
+}
+
+/* Layout */
+.layout { display: grid; grid-template-columns: 320px 1fr; height: 100vh; }
+.sidebar { border-right: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; background: rgba(3,8,19,0.4); }
+.main { overflow-y: auto; padding: 0; }
+
+/* Header */
+.header { background: var(--panel); border-bottom: 1px solid var(--border); padding: 12px 16px; }
+.header h1 { font-size: 15px; font-weight: 800; letter-spacing: 0.02em; color: var(--cyan); }
+.header .subtitle { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+/* Provider bar */
+.provider-bar { background: var(--panel); border-bottom: 1px solid var(--border); padding: 8px 12px; display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+.provider-chip { font-size: 11px; padding: 3px 8px; border-radius: var(--radius-pill); font-weight: 600; }
+.provider-chip.green { background: rgba(54,211,153,0.10); color: var(--green); border: 1px solid rgba(54,211,153,0.34); }
+.provider-chip.yellow { background: rgba(251,191,36,0.10); color: var(--yellow); border: 1px solid rgba(251,191,36,0.34); }
+.provider-chip.red { background: rgba(251,113,133,0.10); color: var(--red); border: 1px solid rgba(251,113,133,0.34); }
+.provider-chip.disabled { background: rgba(92,225,255,0.05); color: var(--faint); border: 1px solid var(--border); }
+.provider-label { font-size: 10px; color: var(--muted); margin-right: 4px; }
+
+/* Task list */
+.task-list-header { padding: 10px 12px; font-size: 11px; color: var(--muted); display: flex; justify-content: space-between; align-items: center; }
+.task-list-header button { font-size: 11px; background: rgba(36,215,255,0.12); color: var(--cyan); border: 1px solid rgba(36,215,255,0.42); border-radius: var(--radius-sm); padding: 4px 8px; cursor: pointer; transition: transform 0.16s ease, background 0.16s ease; }
+.task-list-header button:hover { background: rgba(36,215,255,0.20); transform: translateY(-1px); }
+.task-list { overflow-y: auto; flex: 1; }
+.task-item { padding: 10px 12px; border-bottom: 1px solid rgba(92,225,255,0.08); cursor: pointer; transition: background 0.15s; }
+.task-item:hover { background: rgba(36,215,255,0.05); }
+.task-item.active { background: rgba(36,215,255,0.09); border-left: 3px solid var(--cyan); }
+.task-title-line { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.task-meta { font-size: 10px; color: var(--muted); margin-top: 3px; display: flex; gap: 6px; }
+.status-badge { font-size: 10px; padding: 1px 6px; border-radius: var(--radius-pill); font-weight: 700; }
+.s-draft { background: rgba(92,225,255,0.06); color: var(--muted); }
+.s-planned, .s-awaiting_plan_approval { background: rgba(56,189,248,0.12); color: var(--blue); }
+.s-execution_approved { background: rgba(54,211,153,0.10); color: var(--green); }
+.s-executing { background: rgba(251,191,36,0.12); color: var(--yellow); }
+.s-executed, .s-completed { background: rgba(54,211,153,0.10); color: var(--green); }
+.s-reviewing, .s-validating { background: rgba(92,225,255,0.06); color: var(--text); }
+.s-blocked, .s-cancelled, .s-execution_failed, .s-validation_failed, .s-plan_rejected, .s-review_failed { background: rgba(251,113,133,0.12); color: var(--red); }
+
+/* Detail panel */
+.detail-panel { padding: 0; }
+.detail-header { background: var(--panel); border-bottom: 1px solid var(--border); padding: 16px 20px; }
+.detail-title { font-size: 16px; font-weight: 800; }
+.detail-meta { font-size: 12px; color: var(--muted); margin-top: 6px; display: flex; gap: 12px; flex-wrap: wrap; }
+.detail-body { padding: 16px 20px; }
+
+/* Sections */
+.section { margin-bottom: 20px; }
+.section h3 { font-size: 10px; font-weight: 800; color: var(--cyan); text-transform: uppercase; letter-spacing: 0.14em; margin-bottom: 8px; }
+
+/* Plan list */
+.plan-list { list-style: none; }
+.plan-list li { padding: 4px 0; font-size: 13px; padding-left: 16px; position: relative; }
+.plan-list li::before { content: '→'; position: absolute; left: 0; color: var(--cyan); }
+
+/* File list */
+.file-list { font-family: "JetBrains Mono", monospace; font-size: 12px; }
+.file-list li { padding: 2px 0; color: var(--green); }
+.file-list li::before { content: '  '; }
+
+/* Validation */
+.val-row { display: flex; gap: 8px; align-items: flex-start; padding: 4px 0; font-size: 12px; font-family: "JetBrains Mono", monospace; }
+.val-status { min-width: 50px; font-weight: 700; }
+.val-status.passed { color: var(--green); }
+.val-status.failed { color: var(--red); }
+.val-status.skipped_forbidden { color: var(--yellow); }
+
+/* Review */
+.review-block { background: rgba(3,8,19,0.58); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; font-size: 13px; }
+.review-status { font-weight: 700; margin-bottom: 8px; }
+.review-status.approved { color: var(--green); }
+.review-status.changes_requested { color: var(--yellow); }
+.review-status.blocked { color: var(--red); }
+.issue-list li { padding: 2px 0; color: var(--red); }
+.issue-list li::before { content: '⚠ '; }
+
+/* Source badges */
+.source-badge { font-size: 10px; padding: 1px 6px; border-radius: var(--radius-pill); border: 1px solid; margin-left: 4px; }
+.sb-local { color: var(--green); border-color: rgba(54,211,153,0.34); background: rgba(54,211,153,0.10); }
+.sb-claude { color: var(--blue); border-color: rgba(56,189,248,0.34); background: rgba(56,189,248,0.10); }
+.sb-cowork { color: var(--violet); border-color: rgba(167,139,250,0.34); background: rgba(167,139,250,0.10); }
+
+/* Buttons */
+.btn { display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: var(--radius-sm); font-size: 13px; font-weight: 700; cursor: pointer; border: 1px solid transparent; transition: transform 0.16s ease, opacity 0.15s, box-shadow 0.16s ease; }
+.btn:hover:not(:disabled) { transform: translateY(-1px); }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn-primary { background: rgba(36,215,255,0.14); color: var(--cyan); border-color: rgba(36,215,255,0.42); }
+.btn-primary:hover:not(:disabled) { box-shadow: 0 0 20px rgba(36,215,255,0.16); }
+.btn-success { background: rgba(54,211,153,0.14); color: var(--green); border-color: rgba(54,211,153,0.40); }
+.btn-danger { background: rgba(251,113,133,0.12); color: var(--red); border-color: rgba(251,113,133,0.40); }
+.btn-neutral { background: var(--panel-raised); color: var(--text); border-color: var(--border); }
+.btn-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+
+/* Form */
+.form-group { margin-bottom: 12px; }
+.form-group label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+.form-group input, .form-group textarea, .form-group select { width: 100%; background: rgba(2,7,18,0.72); border: 1px solid var(--border); color: var(--text); border-radius: var(--radius-sm); padding: 7px 10px; font-size: 13px; font-family: inherit; }
+.form-group textarea { min-height: 80px; resize: vertical; }
+.form-group input:focus, .form-group textarea:focus, .form-group select:focus { outline: none; border-color: var(--border-strong); }
+
+/* Token input */
+.token-input-row { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
+.token-input-row input { flex: 1; font-family: "JetBrains Mono", monospace; font-size: 12px; }
+
+/* Empty state */
+.empty-state { color: var(--faint); text-align: center; padding: 40px 20px; font-size: 13px; }
+
+/* Loading */
+.loading { color: var(--muted); font-size: 12px; padding: 8px 0; }
+
+/* Diff */
+.diff-block { background: rgba(3,8,19,0.58); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 12px; font-family: "JetBrains Mono", monospace; font-size: 12px; white-space: pre-wrap; word-break: break-word; max-height: 200px; overflow-y: auto; }
+
+/* Risk badge */
+.risk-badge { font-size: 10px; padding: 1px 6px; border-radius: var(--radius-pill); }
+.risk-low { background: rgba(54,211,153,0.10); color: var(--green); }
+.risk-medium { background: rgba(251,191,36,0.10); color: var(--yellow); }
+.risk-high { background: rgba(251,113,133,0.10); color: var(--red); }
+
+/* Nav back */
+.nav-back { font-size: 12px; color: var(--muted); padding: 10px 20px; border-bottom: 1px solid rgba(92,225,255,0.08); }
+.nav-back a { color: var(--cyan); text-decoration: none; }
+
+/* New task panel */
+.new-task-panel { background: var(--panel); border-bottom: 1px solid var(--border); padding: 14px 16px; }
+.new-task-panel h3 { font-size: 10px; font-weight: 800; color: var(--cyan); text-transform: uppercase; letter-spacing: 0.14em; margin-bottom: 10px; }
+
+/* Toast */
+#toast { position: fixed; bottom: 20px; right: 20px; background: var(--panel); color: var(--text); padding: 10px 16px; border-radius: var(--radius); font-size: 13px; display: none; z-index: 999; border: 1px solid var(--border-strong); box-shadow: var(--shadow); max-width: 320px; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+</style>
+</head>
+<body>
+
+<div class="layout">
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+    <div class="header">
+      <h1>The Sovereign Imperia Citadel Z Task Cockpit</h1>
+      <div class="subtitle">Manifest-driven AI execution</div>
+    </div>
+    <div class="provider-bar" id="providerBar">
+      <span class="provider-label">Providers:</span>
+      <span class="provider-chip disabled" id="chipClaudeCode">Claude Code: …</span>
+      <span class="provider-chip disabled" id="chipCowork">co-work: …</span>
+    </div>
+    <div class="new-task-panel">
+      <h3>New Task</h3>
+      <div class="form-group">
+        <label>Task description</label>
+        <textarea id="newTaskDesc" placeholder="Describe what you want to do..." rows="2"></textarea>
+      </div>
+      <div class="form-group">
+        <label>Mode</label>
+        <select id="newTaskMode">
+          <option value="claude_code_plan_only">Plan only (no execution)</option>
+          <option value="local_only">Local only (no AI)</option>
+          <option value="full_controlled_workflow">Full controlled workflow</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Risk level</label>
+        <select id="newTaskRisk">
+          <option value="low">Low</option>
+          <option value="medium">Medium</option>
+          <option value="high">High</option>
+        </select>
+      </div>
+      <button class="btn btn-primary" onclick="createPlan()">Generate Plan</button>
+    </div>
+    <div class="task-list-header">
+      <span>Tasks</span>
+      <button onclick="loadTasks()">Refresh</button>
+    </div>
+    <div class="task-list" id="taskList">
+      <div class="empty-state">No tasks yet.</div>
+    </div>
+  </div>
+
+  <!-- MAIN -->
+  <div class="main" id="mainPanel">
+    <div class="empty-state" style="padding-top:80px">
+      <div style="font-size:32px;margin-bottom:12px">🧭</div>
+      <div>Select a task or create a new plan.</div>
+      <div style="margin-top:8px;font-size:11px">All AI execution is manifest-driven, approval-gated, and validation-gated.</div>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+const API = '';
+let currentTaskId = null;
+let approvalToken = null;
+
+// ── Utilities ──────────────────────────────────────────────────────────────
+
+function toast(msg, ms=3500) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.style.display = 'block';
+  setTimeout(() => { el.style.display = 'none'; }, ms);
+}
+
+async function api(method, path, body) {
+  const opts = { method, headers: {'Content-Type': 'application/json'} };
+  if (body) opts.body = JSON.stringify(body);
+  const r = await fetch(API + path, opts);
+  return r.json();
+}
+
+function statusClass(s) {
+  const map = {
+    draft:'s-draft', planned:'s-planned', awaiting_plan_approval:'s-awaiting_plan_approval',
+    execution_approved:'s-execution_approved', executing:'s-executing', executed:'s-executed',
+    reviewing:'s-reviewing', validating:'s-validating', completed:'s-completed',
+    blocked:'s-blocked', cancelled:'s-cancelled', execution_failed:'s-execution_failed',
+    validation_failed:'s-validation_failed', plan_rejected:'s-plan_rejected', review_failed:'s-review_failed',
+  };
+  return map[s] || 's-draft';
+}
+
+function riskClass(r) {
+  return {low:'risk-low', medium:'risk-medium', high:'risk-high'}[r] || 'risk-low';
+}
+
+function sourceBadge(source) {
+  if (!source) return '';
+  if (source.includes('local_plus') || source === 'local') return '<span class="source-badge sb-local">Local</span>';
+  if (source.includes('claude')) return '<span class="source-badge sb-claude">Claude Code</span>';
+  if (source.includes('cowork')) return '<span class="source-badge sb-cowork">co-work</span>';
+  return `<span class="source-badge sb-local">${source}</span>`;
+}
+
+// ── Provider status ────────────────────────────────────────────────────────
+
+async function loadProviders() {
+  try {
+    const d = await api('GET', '/api/providers/status');
+    const cc = d.claude_code || {};
+    const cw = d.cowork || {};
+    const chipCC = document.getElementById('chipClaudeCode');
+    const chipCW = document.getElementById('chipCowork');
+    chipCC.className = 'provider-chip ' + (cc.status || 'disabled');
+    chipCC.textContent = 'Claude Code: ' + (cc.available ? '✓ ' + (cc.version || 'ok') : cc.status || 'unknown');
+    chipCW.className = 'provider-chip ' + (cw.status || 'disabled');
+    chipCW.textContent = 'co-work: ' + (cw.status === 'disabled' ? 'disabled' : cw.available ? '✓ ' + (cw.version || 'ok') : (cw.status || 'unknown'));
+  } catch(e) {
+    document.getElementById('chipClaudeCode').textContent = 'Claude Code: error';
+    document.getElementById('chipCowork').textContent = 'co-work: error';
+  }
+}
+
+// ── Task list ──────────────────────────────────────────────────────────────
+
+async function loadTasks() {
+  const d = await api('GET', '/api/execute/tasks');
+  const el = document.getElementById('taskList');
+  const tasks = (d.tasks || []);
+  if (!tasks.length) {
+    el.innerHTML = '<div class="empty-state">No tasks yet.</div>';
+    return;
+  }
+  el.innerHTML = tasks.map(t => `
+    <div class="task-item ${t.task_id === currentTaskId ? 'active' : ''}" onclick="selectTask('${t.task_id}')">
+      <div class="task-title-line">${esc(t.task_title)}</div>
+      <div class="task-meta">
+        <span class="status-badge ${statusClass(t.status)}">${t.status}</span>
+        <span class="risk-badge ${riskClass(t.risk_level)}">${t.risk_level}</span>
+        <span>${t.task_type}</span>
+      </div>
+    </div>
+  `).join('');
+}
+
+// ── Task detail ────────────────────────────────────────────────────────────
+
+async function selectTask(taskId) {
+  currentTaskId = taskId;
+  approvalToken = null;
+  await loadTasks(); // refresh selection highlight
+  const d = await api('GET', '/api/execute/task?id=' + taskId);
+  if (d.error) { renderError(d.error); return; }
+  renderDetail(d.task);
+}
+
+function renderDetail(t) {
+  const plan = t.plan_output || {};
+  const exec = t.execution_output || {};
+  const review = t.review_output || {};
+  const val = t.validation_output || {};
+  const cls = t.classification || {};
+  const ap = t.approval || {};
+
+  const canApprovePlan = t.status === 'awaiting_plan_approval';
+  const canApproveExec = t.status === 'awaiting_plan_approval' || t.status === 'planned';
+  const canRun = t.status === 'execution_approved';
+  const canCancel = ['executing','reviewing','validating','planned','awaiting_plan_approval','execution_approved'].includes(t.status);
+  const canReview = ['executed','completed'].includes(t.status);
+  const canValidate = ['executed','reviewing','completed'].includes(t.status);
+
+  const planSteps = plan.plan || [];
+  const proposedFiles = plan.allowed_files_proposed || [];
+  const validationCmds = t.validation_required || [];
+  const risks = plan.risks || [];
+  const questions = plan.open_questions || [];
+
+  document.getElementById('mainPanel').innerHTML = `
+    <div class="nav-back"><a href="/brain/graph.html">← Graph</a> &nbsp;|&nbsp; <a href="/brain/tasks.html">Tasks</a></div>
+    <div class="detail-header">
+      <div class="detail-title">${esc(t.task_title)}</div>
+      <div class="detail-meta">
+        <span class="status-badge ${statusClass(t.status)}">${t.status}</span>
+        <span class="risk-badge ${riskClass(cls.risk_level || 'low')}">${cls.risk_level || 'low'}</span>
+        <span>${t.task_type} · ${t.mode}</span>
+        <span class="source-badge sb-claude">Claude Code</span>
+        ${ap.approved_by_user ? '<span class="source-badge sb-local">Approved</span>' : ''}
+      </div>
+    </div>
+    <div class="detail-body">
+
+      ${t.user_request ? `
+      <div class="section">
+        <h3>Request</h3>
+        <div style="font-size:13px;color:#cbd5e0">${esc(t.user_request)}</div>
+      </div>` : ''}
+
+      ${planSteps.length ? `
+      <div class="section">
+        <h3>Plan <span class="source-badge sb-claude">Claude Code</span></h3>
+        <ul class="plan-list">${planSteps.map(s=>`<li>${esc(s)}</li>`).join('')}</ul>
+      </div>` : ''}
+
+      ${proposedFiles.length ? `
+      <div class="section">
+        <h3>Proposed Files to Edit</h3>
+        <ul class="file-list">${proposedFiles.map(f=>`<li>${esc(f)}</li>`).join('')}</ul>
+      </div>` : ''}
+
+      ${validationCmds.length ? `
+      <div class="section">
+        <h3>Validation Gates</h3>
+        <ul class="file-list" style="color:#90cdf4">${validationCmds.map(c=>`<li>${esc(c)}</li>`).join('')}</ul>
+      </div>` : ''}
+
+      ${risks.length ? `
+      <div class="section">
+        <h3>Risks</h3>
+        <ul class="issue-list">${risks.map(r=>`<li>${esc(r)}</li>`).join('')}</ul>
+      </div>` : ''}
+
+      ${questions.length ? `
+      <div class="section">
+        <h3>Open Questions</h3>
+        <ul class="plan-list">${questions.map(q=>`<li>${esc(q)}</li>`).join('')}</ul>
+      </div>` : ''}
+
+      <!-- APPROVAL CONTROLS -->
+      <div class="section">
+        <h3>Approval</h3>
+        ${ap.plan_approved ? `<div style="color:#68d391;font-size:13px">✓ Plan approved</div>` : ''}
+        ${ap.execution_approved ? `<div style="color:#68d391;font-size:13px">✓ Execution approved</div>` : ''}
+        <div class="btn-row">
+          ${canApprovePlan ? `<button class="btn btn-success" onclick="approvePlan()">✓ Approve Plan</button>` : ''}
+          ${canApproveExec ? `<button class="btn btn-success" onclick="approveExecution()">✓ Approve Execution</button>` : ''}
+          ${canCancel ? `<button class="btn btn-danger" onclick="cancelTask()">✗ Cancel</button>` : ''}
+        </div>
+        ${canRun ? `
+          <div class="token-input-row" style="margin-top:10px">
+            <input type="password" id="tokenInput" placeholder="Paste approval token here…" />
+            <button class="btn btn-primary" onclick="runExecution()" id="runBtn">Run Execution</button>
+          </div>
+          <div style="font-size:11px;color:#718096;margin-top:4px">Execution is scoped to allowed files only. No auto-commit or push.</div>
+        ` : ''}
+      </div>
+
+      <!-- EXECUTION RESULT -->
+      ${exec.changed_files ? `
+      <div class="section">
+        <h3>Changed Files <span class="source-badge sb-claude">Claude Code</span></h3>
+        <ul class="file-list">${(exec.changed_files||[]).map(f=>`<li>${esc(f)}</li>`).join('')}</ul>
+        ${exec.diff_summary ? `<div class="diff-block" style="margin-top:8px">${esc(exec.diff_summary)}</div>` : ''}
+      </div>` : ''}
+
+      <!-- VALIDATION RESULTS -->
+      ${val.commands && val.commands.length ? `
+      <div class="section">
+        <h3>Validation Results <span class="source-badge sb-local">Local</span></h3>
+        <div style="font-size:12px;margin-bottom:6px;color:${val.status==='passed'?'#68d391':'#fc8181'}">${val.summary || ''}</div>
+        ${val.commands.map(c=>`
+          <div class="val-row">
+            <span class="val-status ${c.status}">${c.status}</span>
+            <span style="color:#a0aec0">${esc(c.command)}</span>
+            <span style="color:#718096">(${c.duration_sec}s)</span>
+          </div>
+          ${c.stderr_tail ? `<div style="font-size:11px;color:#fc8181;font-family:monospace;padding-left:58px;margin-bottom:4px">${esc(c.stderr_tail.slice(0,300))}</div>` : ''}
+        `).join('')}
+      </div>` : ''}
+
+      <!-- REVIEW RESULT -->
+      ${review.status ? `
+      <div class="section">
+        <h3>Review <span class="source-badge sb-cowork">co-work</span></h3>
+        <div class="review-block">
+          <div class="review-status ${review.status}">${review.status.toUpperCase()} · confidence: ${review.confidence||'?'}</div>
+          <div style="margin-bottom:8px;font-size:13px">${esc(review.summary||'')}</div>
+          ${(review.issues||[]).length ? `<ul class="issue-list">${review.issues.map(i=>`<li>${esc(i)}</li>`).join('')}</ul>` : ''}
+          ${(review.missed_edge_cases||[]).length ? `<div style="color:#f6e05e;font-size:12px;margin-top:6px">Edge cases: ${review.missed_edge_cases.join(', ')}</div>` : ''}
+          ${(review.safety_concerns||[]).length ? `<div style="color:#fc8181;font-size:12px;margin-top:4px">Safety: ${review.safety_concerns.join(', ')}</div>` : ''}
+        </div>
+      </div>` : ''}
+
+      <!-- ACTIONS -->
+      <div class="section">
+        <h3>Actions</h3>
+        <div class="btn-row">
+          ${canReview ? `<button class="btn btn-neutral" onclick="triggerReview()">Run co-work Review</button>` : ''}
+          ${canValidate ? `<button class="btn btn-neutral" onclick="triggerValidate()">Run Validation</button>` : ''}
+          <button class="btn btn-neutral" onclick="createLearningCandidate()">Save Learning Candidate</button>
+          <button class="btn btn-neutral" onclick="selectTask('${t.task_id}')">Refresh</button>
+        </div>
+      </div>
+
+      <!-- EVIDENCE TRAIL -->
+      <div class="section">
+        <h3>Task ID</h3>
+        <div style="font-family:monospace;font-size:12px;color:#718096">${t.task_id}</div>
+        <div style="font-size:11px;color:#4a5568;margin-top:4px">Created: ${t.created_at || ''}</div>
+      </div>
+
+    </div>
+  `;
+}
+
+function renderError(msg) {
+  document.getElementById('mainPanel').innerHTML = `<div class="empty-state">${esc(msg)}</div>`;
+}
+
+// ── Actions ────────────────────────────────────────────────────────────────
+
+async function createPlan() {
+  const task = document.getElementById('newTaskDesc').value.trim();
+  if (!task) { toast('Enter a task description.'); return; }
+  const mode = document.getElementById('newTaskMode').value;
+  const risk = document.getElementById('newTaskRisk').value;
+  toast('Generating plan…');
+  const d = await api('POST', '/api/execute/plan', {task, mode, risk_level: risk});
+  await loadTasks();
+  if (d.task_id) {
+    document.getElementById('newTaskDesc').value = '';
+    await selectTask(d.task_id);
+  } else {
+    toast('Error: ' + (d.reason || d.error || JSON.stringify(d)));
+  }
+}
+
+async function approvePlan() {
+  const d = await api('POST', '/api/execute/approve', {task_id: currentTaskId, approve_plan: true});
+  if (d.error) { toast('Error: ' + d.error); return; }
+  toast('Plan approved.');
+  await selectTask(currentTaskId);
+}
+
+async function approveExecution() {
+  const d = await api('POST', '/api/execute/approve', {task_id: currentTaskId, approve_plan: true, approve_execution: true});
+  if (d.error) { toast('Error: ' + d.error); return; }
+  if (d.approval_token) {
+    approvalToken = d.approval_token;
+    toast('Execution approved. Copy the token from the field below and click Run Execution.');
+    await selectTask(currentTaskId);
+    // Pre-fill token field after render
+    setTimeout(() => {
+      const inp = document.getElementById('tokenInput');
+      if (inp) inp.value = approvalToken;
+    }, 100);
+  } else {
+    toast('Approved.');
+    await selectTask(currentTaskId);
+  }
+}
+
+async function runExecution() {
+  const token = (document.getElementById('tokenInput') || {}).value || approvalToken || '';
+  if (!token) { toast('Enter the approval token.'); return; }
+  toast('Running scoped execution…');
+  const d = await api('POST', '/api/execute/run', {
+    task_id: currentTaskId,
+    approval_token: token,
+    mode: 'claude_code_execute_scoped',
+  });
+  approvalToken = null;
+  await loadTasks();
+  await selectTask(currentTaskId);
+  if (d.status === 'blocked') {
+    toast('Blocked: ' + (d.reason || JSON.stringify(d)));
+  } else {
+    toast('Execution complete: ' + (d.status || ''));
+  }
+}
+
+async function cancelTask() {
+  const d = await api('POST', '/api/execute/cancel', {task_id: currentTaskId, reason: 'user_cancelled'});
+  await loadTasks();
+  await selectTask(currentTaskId);
+  toast(d.status === 'cancelled' ? 'Task cancelled.' : (d.error || 'Error cancelling.'));
+}
+
+async function triggerReview() {
+  toast('Running co-work review…');
+  const d = await api('POST', '/api/execute/review', {task_id: currentTaskId, review_type: 'final'});
+  await selectTask(currentTaskId);
+  toast('Review complete: ' + (d.status || ''));
+}
+
+async function triggerValidate() {
+  toast('Running validation…');
+  const d = await api('POST', '/api/execute/validate', {task_id: currentTaskId});
+  await selectTask(currentTaskId);
+  toast('Validation: ' + (d.summary || d.status || ''));
+}
+
+async function createLearningCandidate() {
+  const d = await api('POST', '/api/execute/learn', {task_id: currentTaskId});
+  toast(d.status === 'ok' ? 'Learning candidate saved.' : (d.error || 'Error'));
+}
+
+// ── Escape ─────────────────────────────────────────────────────────────────
+
+function esc(s) {
+  if (!s) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── Init ───────────────────────────────────────────────────────────────────
+
+(async () => {
+  await Promise.all([loadProviders(), loadTasks()]);
+})();
+</script>
+</body>
+</html>

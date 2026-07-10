@@ -1,0 +1,16 @@
+{
+  "_comment": "Zero-token feature replication template registry. Keyed by template_id.",
+  "_schema": {
+    "template_id": "string — unique slug",
+    "description": "string — what this template does",
+    "source_unit": "string — which org unit created it",
+    "placeholders": "list[string] — placeholder names used in patch_hunks as {NAME}",
+    "patch_hunks": "list[{file, find, replace}] — parameterized patches",
+    "validation_cmd": "string — shell command to validate after apply",
+    "status": "active|disabled",
+    "registered_at": "ISO timestamp",
+    "applied_count": "int",
+    "success_count": "int",
+    "rollback_count": "int"
+  }
+}

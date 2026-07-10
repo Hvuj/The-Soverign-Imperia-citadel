@@ -1,0 +1,51 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "learning-candidate.schema.json",
+  "title": "LearningCandidate",
+  "description": "Schema for post-task learning candidates to be reviewed before memory write.",
+  "type": "object",
+  "required": ["task_id", "what_worked", "what_failed", "should_update_memory", "requires_user_review"],
+  "properties": {
+    "task_id": { "type": "string" },
+    "task_type": { "type": "string" },
+    "created_at": { "type": "string", "format": "date-time" },
+    "what_worked": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "what_failed": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "routing_updates": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "context_updates": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "validation_updates": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "skill_updates": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "agent_updates": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "memory_candidates": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "artifact_candidates": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "should_update_memory": { "type": "boolean" },
+    "requires_user_review": { "type": "boolean" }
+  }
+}

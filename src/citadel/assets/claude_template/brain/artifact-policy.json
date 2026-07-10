@@ -1,0 +1,93 @@
+{
+  "version": 1,
+  "comment": "Canonical artifact type registry. Migrated from workflow-manifest-config.json v6. Consumed by tools/artifact_scheduler.py and tools/build_execution_manifest.py.",
+
+  "artifact_types": {
+    "file_map":                 {"filename": "file-map.md",                 "description": "Files touched and their roles"},
+    "implementation_plan":      {"filename": "implementation-plan.md",      "description": "Step-by-step implementation plan"},
+    "risk_checklist":           {"filename": "risk-checklist.md",           "description": "Risk and gotcha checklist"},
+    "validation_checklist":     {"filename": "validation-checklist.md",     "description": "Validation steps and status"},
+    "root_cause_note":          {"filename": "root-cause-note.md",          "description": "Root cause of bug or failure"},
+    "feature_contract":         {"filename": "feature-contract.md",         "description": "Feature schema, inputs, outputs, invariants"},
+    "data_contract_note":       {"filename": "data-contract-note.md",       "description": "Dataframe schema, column contracts, join keys"},
+    "test_plan":                {"filename": "test-plan.md",                "description": "What tests are needed and why"},
+    "diff_summary":             {"filename": "diff-summary.md",             "description": "Compact summary of changes made"},
+    "validation_report":        {"filename": "validation-report.md",        "description": "Test/validation results"},
+    "memory_candidate":         {"filename": "memory-candidate.md",         "description": "Candidate durable lesson for memory-curator"},
+    "routing_update_note":      {"filename": "routing-update-note.md",      "description": "Routing/graph changes needed or applied"},
+    "docs_ingestion_summary":   {"filename": "docs-ingestion-summary.md",   "description": "Summary of ingested documentation"},
+    "scheduler_decision_report":{"filename": "scheduler-decision-report.md","description": "Compact scheduler stack decision summary (tiers, agents, artifacts, validations)"}
+  },
+
+  "task_type_to_artifacts": {
+    "feature_change": {
+      "required": ["file_map", "feature_contract", "validation_checklist", "diff_summary", "validation_report"],
+      "conditional": ["memory_candidate"],
+      "conditional_conditions": {"memory_candidate": "when reusable feature logic, join strategy, or validation pattern"}
+    },
+    "bug_fix": {
+      "required": ["root_cause_note", "implementation_plan", "validation_checklist", "diff_summary", "validation_report"],
+      "conditional": []
+    },
+    "debugging": {
+      "required": ["root_cause_note"],
+      "conditional": ["implementation_plan"],
+      "conditional_conditions": {"implementation_plan": "only if implementation is explicitly requested"}
+    },
+    "docs_ingestion": {
+      "required": ["docs_ingestion_summary"],
+      "conditional": ["routing_update_note", "memory_candidate"],
+      "conditional_conditions": {
+        "routing_update_note": "if graph changes were made",
+        "memory_candidate": "if durable rules were extracted"
+      }
+    },
+    "docstring_only": {
+      "required": [],
+      "conditional": ["validation_report"],
+      "conditional_conditions": {"validation_report": "if ruff or other checks were run"}
+    },
+    "test_creation": {
+      "required": ["test_plan", "validation_report", "diff_summary"],
+      "conditional": []
+    },
+    "refactor": {
+      "required": ["implementation_plan", "diff_summary", "validation_report"],
+      "conditional": ["memory_candidate"],
+      "conditional_conditions": {"memory_candidate": "if reusable refactor pattern discovered"}
+    },
+    "graph_brain_tooling": {
+      "required": ["implementation_plan", "routing_update_note", "scheduler_decision_report", "validation_checklist", "validation_report", "diff_summary", "memory_candidate"],
+      "conditional": []
+    },
+    "terminal_help":   {"required": [], "conditional": []},
+    "question":        {"required": [], "conditional": []},
+    "bi_logic": {
+      "required": ["validation_checklist", "validation_report"],
+      "conditional": ["memory_candidate"],
+      "conditional_conditions": {"memory_candidate": "if new durable BI rule discovered"}
+    },
+    "data_contract": {
+      "required": ["data_contract_note", "validation_checklist", "validation_report"],
+      "conditional": []
+    },
+    "orchestration": {
+      "required": ["implementation_plan", "validation_checklist", "validation_report"],
+      "conditional": ["memory_candidate"],
+      "conditional_conditions": {"memory_candidate": "if durable Orchestration pattern discovered"}
+    },
+    "parcompute": {
+      "required": ["implementation_plan", "validation_checklist", "validation_report"],
+      "conditional": ["memory_candidate"],
+      "conditional_conditions": {"memory_candidate": "if durable Parcompute pattern discovered"}
+    },
+    "sql": {
+      "required": ["validation_checklist", "validation_report"],
+      "conditional": []
+    },
+    "validation_only": {
+      "required": ["validation_report"],
+      "conditional": []
+    }
+  }
+}

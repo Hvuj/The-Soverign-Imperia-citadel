@@ -1,0 +1,10 @@
+{
+  "directors": ["correctness", "velocity", "maintainability"],
+  "tie_breaker_policy": "Correctness always breaks deadlocks. Vetoes flow automatically on structural safety violations.",
+  "precedence_rules": {
+    "simplicity_vs_structure": "Evaluated on import-degree of affected symbol. High degree triggers Structure wins; Leaf node triggers Simplicity wins.",
+    "frugality_vs_dryness": "Evaluated on occurrence counters. Under 3 matches triggers Frugality wins (YAGNI). Third match triggers Dryness wins (Consolidate).",
+    "convention_vs_explicit": "Triggered on discovery patterns. Stable match found across 3+ sites triggers Convention wins.",
+    "do_it_once_vs_novel": "Triggered on mechanical pattern matching. Preconditions matched triggers reuse."
+  }
+}

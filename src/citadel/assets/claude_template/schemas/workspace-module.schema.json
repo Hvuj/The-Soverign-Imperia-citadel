@@ -1,0 +1,46 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "workspace-module.schema.json",
+  "title": "WorkspaceModule",
+  "description": "Schema for /api/workspace/module response.",
+  "type": "object",
+  "required": ["module_id", "repo_id", "path", "imports", "exported_symbols"],
+  "properties": {
+    "module_id": { "type": "string" },
+    "repo_id": { "type": "string" },
+    "module_name": { "type": "string" },
+    "path": { "type": "string" },
+    "imports": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "imported_by": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "exported_symbols": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "orchestration_assets": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "schema_models": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "config_models": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "test_modules": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "reuse_candidates": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  }
+}

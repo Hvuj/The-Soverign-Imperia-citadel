@@ -1,0 +1,22 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "SilverFrontmatter",
+  "type": "object",
+  "properties": {
+    "tags": { "type": "array", "items": { "type": "string" } },
+    "content_type": { "type": "string", "enum": ["book", "transcript", "note", "code", "bug"] },
+    "domains": { "type": "array", "items": { "type": "string" } },
+    "source_hash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "source_title": { "type": "string" },
+    "author": { "type": "string" },
+    "date_ingested": { "type": "string", "format": "date-time" },
+    "summary": { "type": "string", "minLength": 20, "maxLength": 600 },
+    "claims": {
+      "type": "array",
+      "items": { "$ref": "atomic-claim.schema.json" },
+      "minItems": 1
+    }
+  },
+  "required": ["tags", "content_type", "domains", "source_hash", "date_ingested", "summary", "claims"],
+  "additionalProperties": false
+}

@@ -1,0 +1,28 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "workspace-source-range.schema.json",
+  "title": "WorkspaceSourceRange",
+  "description": "Schema for /api/workspace/file/content and /api/workspace/file/range responses. Content is always escaped.",
+  "type": "object",
+  "required": ["file_id", "start_line", "end_line", "content", "content_escaped"],
+  "properties": {
+    "file_id": { "type": "string" },
+    "path": { "type": "string" },
+    "start_line": { "type": "integer", "minimum": 1 },
+    "end_line": { "type": "integer", "minimum": 1 },
+    "total_lines": { "type": "integer", "minimum": 0 },
+    "content": {
+      "type": "string",
+      "description": "Raw content of the range."
+    },
+    "content_escaped": {
+      "type": "string",
+      "description": "HTML-escaped content safe for rendering."
+    },
+    "truncated": { "type": "boolean" },
+    "stale_index_warning": {
+      "type": "boolean",
+      "description": "True if the index may be out of date for this file."
+    }
+  }
+}

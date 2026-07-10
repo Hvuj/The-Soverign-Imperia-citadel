@@ -1,0 +1,98 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "execution-manifest.schema.json",
+  "title": "ExecutionManifest",
+  "description": "Schema for Citadel execution manifests that gate AI task execution.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "task_id",
+    "task_type",
+    "mode",
+    "created_at",
+    "status",
+    "allowed_files"
+  ],
+  "properties": {
+    "schema_version": { "type": "string" },
+    "task_id": { "type": "string" },
+    "task_title": { "type": "string" },
+    "task_type": { "type": "string" },
+    "mode": { "type": "string" },
+    "created_at": { "type": "string", "format": "date-time" },
+    "updated_at": { "type": "string", "format": "date-time" },
+    "user_request": { "type": "string" },
+    "classification": { "type": "object" },
+    "allowed_repos": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "allowed_files": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "forbidden_files": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "allowed_commands": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "forbidden_commands": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "context_sources": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "context_capsule_path": { "type": "string" },
+    "selected_agents": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "selected_skills": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "selected_workflows": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "required_artifacts": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "required_validations": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "grounding_policy": { "type": "object" },
+    "output_schema": { "type": "string" },
+    "prompt_leak_policy": { "type": "object" },
+    "approval": { "type": "object" },
+    "provider_plan": { "type": "object" },
+    "status": {
+      "type": "string",
+      "enum": [
+        "draft",
+        "planned",
+        "awaiting_plan_approval",
+        "plan_rejected",
+        "execution_approved",
+        "executing",
+        "execution_failed",
+        "executed",
+        "reviewing",
+        "review_failed",
+        "validating",
+        "validation_failed",
+        "completed",
+        "blocked",
+        "cancelled",
+        "interrupted"
+      ]
+    }
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "type": "object",
+  "required": [
+    "nodes",
+    "links"
+  ],
+  "properties": {
+    "nodes": {
+      "type": "array"
+    },
+    "links": {
+      "type": "array"
+    }
+  }
+}

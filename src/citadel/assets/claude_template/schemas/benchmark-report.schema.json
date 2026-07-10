@@ -1,0 +1,36 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "benchmark-report.schema.json",
+  "title": "Best-Practices Benchmark Report",
+  "description": "Deterministic per-repo best-practices score from tools/best_practices_benchmark.py: 8 principle analyzers (KISS/YAGNI/SOLID/DRY/LoD/OOP/CoC/craft) + a PEP8 sub-score from ruff, aggregated into a weighted 0-100 composite. LOC is recorded so results can be compared against LOC/cost/latency tools (e.g. external) later.",
+  "type": "object",
+  "required": ["repo", "generated_at", "composite", "per_principle", "file_count", "loc_total"],
+  "properties": {
+    "repo": {"type": "string"},
+    "generated_at": {"type": "number", "description": "Float epoch seconds."},
+    "composite": {"type": "number", "minimum": 0, "maximum": 100},
+    "file_count": {"type": "integer", "minimum": 0},
+    "loc_total": {"type": "integer", "minimum": 0},
+    "weights": {"type": "object", "description": "Per-principle weights used for the composite."},
+    "per_principle": {
+      "type": "object",
+      "description": "Per principle: mean and worst score across files.",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {"mean": {"type": "number"}, "worst": {"type": "number"}}
+      }
+    },
+    "files": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "path": {"type": "string"},
+          "loc": {"type": "integer"},
+          "ruff_violations": {"type": "integer"},
+          "scores": {"type": "object"}
+        }
+      }
+    }
+  }
+}

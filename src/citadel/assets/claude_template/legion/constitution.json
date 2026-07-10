@@ -1,0 +1,10 @@
+{
+  "rules": {
+    "01_no_silent_merge": "Every durable write must carry a validated gate-scorecard record.",
+    "02_no_ladder_bypass": "Verification ladder L0-L4 cannot be bypassed by any task context.",
+    "03_no_secret_exfiltration": "Prompt capsules are subjected to Shannon entropy and key signature pattern filtering.",
+    "04_no_unapproved_destructive_ops": "Recursive sweeps, deletions, and forced push events require valid local approval tokens.",
+    "05_tier_decision_audit": "Every Tier 1 and Tier 2 decision must append a structured tier-decision log.",
+    "06_recurring_decision_mandate": "Any distinct decision repeated greater than or equal to 3 times must become a Tier-1 deterministic worker."
+  }
+}

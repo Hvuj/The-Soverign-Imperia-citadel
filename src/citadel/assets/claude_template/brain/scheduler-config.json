@@ -1,0 +1,135 @@
+{
+  "version": 1,
+  "comment": "Scheduler stack hierarchy and configuration. All 11 schedulers are deterministic Python/config logic. Claude agents are used only when reasoning is truly required (i.e., routing confidence is low or context ambiguity is high). Consumed by tools/scheduler_lint.py.",
+
+  "scheduler_hierarchy": [
+    {
+      "order": 1,
+      "name": "general_scheduler",
+      "description": "Classify prompt into one of 16 task types using keyword/pattern scoring",
+      "implementation": "tools/build_execution_manifest.py:classify_task_type",
+      "deterministic": true,
+      "output_keys": ["task_type", "confidence"],
+      "fallback": "question task_type at confidence 0.4"
+    },
+    {
+      "order": 2,
+      "name": "intent_scheduler",
+      "description": "Resolve intent via keyword/alias/path/topic index lookup. Never reads source files unless index miss.",
+      "implementation": "tools/brain_context_builder.py:build",
+      "deterministic": true,
+      "uses_indexes": [
+        "keyword-to-nodes.json", "alias-to-nodes.json", "path-to-nodes.json",
+        "topic-to-capsule.json", "node-to-capsule.json", "node-to-neighbors.json",
+        "node-to-agents.json", "node-to-skills.json", "node-rank.json",
+        "prompt-route-cache.json"
+      ],
+      "output_keys": ["intent", "selected_nodes", "recommended_skills"]
+    },
+    {
+      "order": 3,
+      "name": "topic_context_scheduler",
+      "description": "Select minimal capsules/files/memory refs. Default max_depth=2. Prefer cached capsules over source files.",
+      "implementation": "tools/brain_context_builder.py:build (capsule selection)",
+      "deterministic": true,
+      "output_keys": ["context_capsules", "selected_nodes"],
+      "max_depth_default": 2,
+      "cheap_path": "cached capsules first, source reads only on cache miss"
+    },
+    {
+      "order": 4,
+      "name": "workflow_scheduler",
+      "description": "Select one strict workflow contract from workflow-manifest-config.json",
+      "implementation": "tools/build_execution_manifest.py:task_type_to_workflow lookup",
+      "deterministic": true,
+      "output_keys": ["selected_workflow", "workflow_contract"],
+      "config": ".claude/brain/workflow-manifest-config.json"
+    },
+    {
+      "order": 5,
+      "name": "model_effort_scheduler",
+      "description": "Advisory tier scheduling: planning/execution/review tiers, plan_frozen, cheap_execution_allowed, escalation_policy",
+      "implementation": "tools/model_effort_scheduler.py:schedule",
+      "deterministic": true,
+      "output_keys": [
+        "planning_tier", "execution_tier", "review_tier",
+        "planning_effort_tier", "execution_effort_tier", "review_effort_tier",
+        "cheap_execution_allowed", "plan_frozen", "escalation_policy"
+      ],
+      "config": ".claude/brain/model-effort-config.json",
+      "state_output": ".claude/state/model-effort-schedule.json",
+      "constraint": "Never emit /model or /effort commands. Tiers are advisory only. Ultracode escalation documented in escalation_policy, not emitted."
+    },
+    {
+      "order": 6,
+      "name": "agent_budget_scheduler",
+      "description": "All agents considered. Only allowlist invoked. Unrelated agents skipped with reason. Cap: docs/graph<=5, others<=8.",
+      "implementation": "tools/build_execution_manifest.py:schedule_agents / tools/agent_budget_scheduler.py",
+      "deterministic": true,
+      "output_keys": ["required_agents", "skipped_agents"],
+      "caps": {"docs_ingestion": 5, "question": 5, "workflow": 5, "default": 8},
+      "skip_reason_enum": ["unrelated_domain", "intent_not_matching", "over_budget", "forbidden_by_workflow", "explicitly_not_needed", "cheap_path_no_agent_needed"]
+    },
+    {
+      "order": 7,
+      "name": "skill_scheduler",
+      "description": "Skills from workflow + routing capsule. Selected skills become required procedures in manifest.",
+      "implementation": "tools/build_execution_manifest.py:schedule_skills",
+      "deterministic": true,
+      "output_keys": ["required_skills"],
+      "config": "workflow-manifest-config.json:skill_contracts"
+    },
+    {
+      "order": 8,
+      "name": "artifact_scheduler",
+      "description": "Artifacts enforced by workflow. Trivial tasks get no artifacts. Auto from task_type_to_artifacts.",
+      "implementation": "tools/build_execution_manifest.py:schedule_artifacts / tools/artifact_scheduler.py",
+      "deterministic": true,
+      "output_keys": ["required_artifacts"],
+      "config": ".claude/brain/artifact-policy.json",
+      "state_dir": ".claude/state/artifacts/current/"
+    },
+    {
+      "order": 9,
+      "name": "validation_scheduler",
+      "description": "Choose cheapest valid checks per workflow. No broad validation when focused is enough.",
+      "implementation": "tools/build_execution_manifest.py:schedule_validations / tools/validation_scheduler.py",
+      "deterministic": true,
+      "output_keys": ["required_validations", "required_tools"]
+    },
+    {
+      "order": 10,
+      "name": "memory_scheduler",
+      "description": "Gate memory writes. Skip for skip_types. Surface domain_join_rules when relevant.",
+      "implementation": "tools/build_execution_manifest.py:schedule_memory / tools/memory_scheduler.py",
+      "deterministic": true,
+      "output_keys": ["memory_policy"],
+      "config": ".claude/brain/memory-policy.json"
+    },
+    {
+      "order": 11,
+      "name": "daemon_index_scheduler",
+      "description": "Graph/index/capsule refresh. Automatic via incremental_brain_daemon. Token-free: never calls Claude, never edits production code.",
+      "implementation": "tools/incremental_brain_daemon.py (mtime+size fingerprint watch)",
+      "deterministic": true,
+      "watched_roots": [".claude/brain", ".claude/rules", ".claude/skills", ".claude/agents", ".claude/hooks", "docs/brain/nodes", "docs/ai-context", "tools", "scripts"],
+      "rebuild_on_change": "affected capsules and search index only; full rebuild for structural graph/config changes",
+      "constraint": "Never calls Claude. Never edits production code. Never invokes nested Claude CLI."
+    }
+  ],
+
+  "orchestration": {
+    "all_schedulers_run_per_prompt": true,
+    "orchestrator": "tools/build_execution_manifest.py:build_manifest",
+    "state_output": ".claude/state/scheduler-decision.json",
+    "hook_trigger": ".claude/hooks/user-prompt-execution-manifest.sh"
+  },
+
+  "caps": {
+    "docs_graph_max_agents": 5,
+    "other_max_agents": 8,
+    "max_context_depth_default": 2,
+    "max_context_nodes": 12,
+    "max_memory_refs": 8
+  }
+}

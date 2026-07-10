@@ -1,0 +1,18 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Codemod",
+  "type": "object",
+  "properties": {
+    "codemod_id": { "type": "string", "pattern": "^cmd_[a-f0-9]{8}$" },
+    "target_language": { "type": "string" },
+    "error_classes": { "type": "array", "items": { "type": "string" } },
+    "precondition_ast": { "type": "object" },
+    "applied_count": { "type": "integer", "minimum": 0 },
+    "success_count": { "type": "integer", "minimum": 0 },
+    "rollback_count": { "type": "integer", "minimum": 0 },
+    "status": { "type": "string", "enum": ["active", "disabled", "deprecated"] },
+    "registered_from_task": { "type": "string" }
+  },
+  "required": ["codemod_id", "target_language", "error_classes", "precondition_ast", "applied_count", "success_count", "rollback_count", "status", "registered_from_task"],
+  "additionalProperties": false
+}

@@ -1,0 +1,39 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "validation-result.schema.json",
+  "title": "ValidationResult",
+  "description": "Schema for Citadel validation runner results.",
+  "type": "object",
+  "required": ["task_id", "status", "commands", "summary"],
+  "properties": {
+    "task_id": { "type": "string" },
+    "status": {
+      "type": "string",
+      "enum": ["passed", "failed", "partial", "skipped"]
+    },
+    "commands": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["command", "exit_code"],
+        "properties": {
+          "command": { "type": "string" },
+          "exit_code": { "type": "integer" },
+          "stdout_tail": { "type": "string" },
+          "stderr_tail": { "type": "string" },
+          "duration_sec": { "type": "number" }
+        }
+      }
+    },
+    "summary": { "type": "string" },
+    "failed_commands": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "warnings": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "created_at": { "type": "string", "format": "date-time" }
+  }
+}

@@ -1,0 +1,86 @@
+{
+  "schema_version": "1.0",
+  "enabled": true,
+  "providers": {
+    "claude_code": {
+      "enabled": true,
+      "mode": "cli_or_desktop_detect",
+      "priority": 1,
+      "allow_planning": true,
+      "allow_qna": true,
+      "allow_execution": true,
+      "allow_review": false,
+      "requires_explicit_approval_for_execution": true,
+      "max_calls_per_task": 3,
+      "timeout_sec": 300,
+      "max_context_chars": 50000,
+      "max_output_chars": 20000
+    },
+    "cowork": {
+      "enabled": false,
+      "mode": "detect",
+      "command": "",
+      "priority": 2,
+      "allow_planning": false,
+      "allow_qna": false,
+      "allow_execution": false,
+      "allow_review": true,
+      "requires_explicit_approval_for_review": false,
+      "max_calls_per_task": 2,
+      "timeout_sec": 300,
+      "max_context_chars": 50000,
+      "max_output_chars": 20000
+    },
+    "anthropic_sdk": {
+      "enabled": false,
+      "priority": 3,
+      "allow_planning": false,
+      "allow_qna": true,
+      "allow_execution": false,
+      "allow_review": false
+    }
+  },
+  "default_modes": {
+    "ask_fallback": "local_plus_claude_code",
+    "planning": "claude_code_plan_only",
+    "execution": "claude_code_execute_scoped",
+    "review": "cowork_review_only",
+    "full_workflow": "manifest_driven_controlled"
+  },
+  "security": {
+    "daemon_invocation_allowed": false,
+    "indexer_invocation_allowed": false,
+    "auto_execution_allowed": false,
+    "require_manifest_for_execution": true,
+    "require_user_approval_for_file_edits": true,
+    "require_allowed_files_for_execution": true,
+    "allow_arbitrary_file_reads": false,
+    "allow_secret_access": false,
+    "allow_external_network": false,
+    "allow_unbounded_shell": false,
+    "allow_production_deploy": false,
+    "allow_git_push": false,
+    "allow_git_commit": false,
+    "allow_destructive_commands": false
+  },
+  "approval_token": {
+    "ttl_seconds": 1800,
+    "length_bytes": 32
+  },
+  "rate_limits": {
+    "max_calls_per_hour": 20,
+    "max_context_chars_per_call": 50000,
+    "max_output_chars_per_call": 20000,
+    "max_execution_duration_sec": 300,
+    "max_review_duration_sec": 300,
+    "max_retries_per_attempt": 1
+  },
+  "audit": {
+    "enabled": true,
+    "path": ".claude/state/ai-provider-audit.log",
+    "log_prompts": false,
+    "log_context_manifest": true,
+    "log_diff_summary": true,
+    "log_validation": true
+  }
+}

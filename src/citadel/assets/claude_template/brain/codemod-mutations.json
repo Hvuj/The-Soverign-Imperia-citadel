@@ -1,0 +1,3 @@
+{
+  "cmd_a0fab137": "output = source.replace('dict[key]', 'dict.get(key, None)')"
+}

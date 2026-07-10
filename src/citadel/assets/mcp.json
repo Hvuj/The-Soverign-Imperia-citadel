@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "sovereign-imperia-citadel": {
+      "command": "python3",
+      "args": ["tools/citadel_mcp_server.py"]
+    }
+  }
+}

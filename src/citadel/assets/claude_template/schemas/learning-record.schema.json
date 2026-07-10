@@ -1,0 +1,22 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "LearningRecord",
+  "type": "object",
+  "properties": {
+    "decisions_by_tier": { "type": "object" },
+    "principle_scorecard": { "$ref": "principle-scorecard.schema.json" },
+    "model_tiers_used": { "type": "array", "items": { "type": "string" } },
+    "outcome": {
+      "type": "object",
+      "properties": {
+        "validation_passed": { "type": "boolean" },
+        "subsequent_bugs_30d": { "type": "integer" },
+        "subsequent_rework_commits": { "type": "integer" },
+        "user_intervention_required": { "type": "boolean" }
+      },
+      "required": ["validation_passed", "subsequent_bugs_30d", "subsequent_rework_commits", "user_intervention_required"]
+    }
+  },
+  "required": ["decisions_by_tier", "principle_scorecard", "model_tiers_used", "outcome"],
+  "additionalProperties": false
+}

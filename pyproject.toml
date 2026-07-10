@@ -1,0 +1,148 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "sovereign-imperia-citadel"
+dynamic = ["version"]
+description = "Workspace-agnostic graph-brain + multi-agent orchestration layer for Claude Code."
+readme = "README.md"
+requires-python = ">=3.12"
+authors = [
+  { name = "Eli Sigal", email = "eli.sigal.dev@gmail.com" },
+]
+
+license = "GPL-3.0-or-later"
+
+dependencies = []
+
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Operating System :: OS Independent",
+]
+
+[project.optional-dependencies]
+ai = ["anthropic>=0.116.0"]
+daemons = ["watchdog>=6.0.0"]
+reports = ["matplotlib>=3.11.0"]
+obsidian = ["PyYAML>=6.0.3", "watchdog>=6.0.0"]
+all = [
+  "anthropic>=0.116.0",
+  "watchdog>=6.0.0",
+  "matplotlib>=3.11.0",
+  "PyYAML>=6.0.3",
+]
+
+[project.scripts]
+citadel = "citadel.cli:main"
+
+[tool.hatch.version]
+path = "src/citadel/__init__.py"
+
+[tool.hatch.build.targets.sdist]
+include = [
+  "/src",
+  "/tools",
+  "/scripts",
+  "/.citadel/.claude",
+  "/docs",
+  "/README.md",
+  "/LICENSE*",
+  "/pyproject.toml",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/citadel"]
+artifacts = [
+  "src/citadel/assets/**",
+]
+
+[tool.hatch.build.targets.wheel.force-include]
+"tools/" = "citadel/tools/"
+"scripts/" = "citadel/scripts/"
+
+[dependency-groups]
+dev = [
+  { include-group = "lint" },
+  { include-group = "test" },
+  "anthropic>=0.116.0",
+  "watchdog>=6.0.0",
+  "matplotlib>=3.11.0",
+  "PyYAML>=6.0.3",
+]
+lint = [
+  "ruff==0.15.20",
+  "ty==0.0.55",
+]
+test = [
+  "pytest==9.1.1",
+]
+
+[tool.uv]
+package = true
+default-groups = ["dev"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+src = ["src", "tests"]
+extend-exclude = [
+  ".claude",
+  ".citadel",
+  "build",
+  "dist",
+]
+
+[tool.ruff.lint]
+select = [
+  "E",    # pycodestyle errors
+  "F",    # pyflakes
+  "W",    # pycodestyle warnings
+  "I",    # isort
+  "UP",   # pyupgrade
+  "B",    # flake8-bugbear
+  "SIM",  # flake8-simplify
+  "C4",   # flake8-comprehensions
+  "ARG",  # unused function arguments
+  "PT",   # pytest style
+  "RUF",  # Ruff-specific rules
+]
+fixable = ["ALL"]
+unfixable = []
+
+[tool.ruff.lint.isort]
+known-first-party = ["citadel"]
+combine-as-imports = true
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = [
+  "ARG001",
+  "ARG002",
+  "ARG005",
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"
+docstring-code-format = true
+
+[tool.ty.environment]
+python-version = "3.12"
+root = ["./src"]
+
+[tool.ty.src]
+include = ["src", "tests"]
+exclude = [
+  ".venv",
+  "build",
+  "dist",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = "-ra --strict-markers -v"

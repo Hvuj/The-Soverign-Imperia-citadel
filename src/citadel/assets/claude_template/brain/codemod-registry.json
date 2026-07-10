@@ -1,0 +1,31 @@
+{
+  "cmd_962d2a70": {
+    "codemod_id": "cmd_962d2a70",
+    "target_language": "python",
+    "error_classes": [
+      "ValueError"
+    ],
+    "precondition_ast": {},
+    "applied_count": 0,
+    "success_count": 0,
+    "rollback_count": 0,
+    "status": "active",
+    "registered_from_task": "phase1_smoke_test"
+  },
+  "cmd_a0fab137": {
+    "codemod_id": "cmd_a0fab137",
+    "target_language": "python",
+    "error_classes": [
+      "KeyError"
+    ],
+    "precondition_ast": {
+      "required_pattern_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "locus": "Subscript:get_value"
+    },
+    "applied_count": 0,
+    "success_count": 0,
+    "rollback_count": 0,
+    "status": "active",
+    "registered_from_task": "task_p8_smoke"
+  }
+}

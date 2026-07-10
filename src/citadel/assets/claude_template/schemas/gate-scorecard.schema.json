@@ -1,0 +1,17 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "GateScorecard",
+  "type": "object",
+  "properties": {
+    "write_id": { "type": "string", "pattern": "^wrt_[a-f0-9]{12}$" },
+    "l0_passed": { "type": "boolean" },
+    "l1_passed": { "type": "boolean" },
+    "l2_margin": { "type": "number" },
+    "l3_quorum": { "type": "string" },
+    "l4_canary_passed": { "type": "boolean" },
+    "model_tier_used": { "type": "string", "enum": ["T0", "T1", "T2"] },
+    "timestamp": { "type": "integer" }
+  },
+  "required": ["write_id", "l0_passed", "l1_passed", "l2_margin", "l3_quorum", "l4_canary_passed", "model_tier_used", "timestamp"],
+  "additionalProperties": false
+}

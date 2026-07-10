@@ -1,0 +1,13 @@
+{
+  "_comment": "Workspace-learned framework-detection vocabulary. Ships EMPTY: the Citadel carries no tech-specific knowledge. The learning layer (feature-implementation-learner / the auto-mapper) inspects THIS workspace's code, docs, imports and commit history, decides which decorators/base-classes/import-markers signify each category below, and fills these arrays. build_workspace_intelligence_index.py reads this file to categorize what it indexes; empty arrays -> no framework-specific categorization (raw decorators/imports are still recorded).",
+  "asset_decorators": [],
+  "check_decorators": [],
+  "job_decorators": [],
+  "schedule_decorators": [],
+  "sensor_decorators": [],
+  "config_model_bases": [],
+  "schema_model_bases": [],
+  "dataframe_import_markers": [],
+  "distributed_import_markers": [],
+  "query_import_markers": []
+}

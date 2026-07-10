@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "comment": "Detailed index knobs. SCOPE (workspace_root, repo_include_globs, repo_exclude_globs) is the single source of truth in .citadel/config.toml and is overlaid at load time by tools/_workspace_intel_common.load_config(); the values here are only fallbacks when config.toml is absent.",
+  "schema_version": "1.0",
+  "workspace_root": "${CLAUDE_PROJECT_DIR}/..",
+  "repo_include_globs": ["*"],
+  "repo_exclude_globs": ["sovereign-imperia-citadel"],
+  "include_extensions": [".py", ".md", ".json", ".yaml", ".yml", ".toml", ".sh", ".feature", ".sql", ".txt"],
+  "exclude_dirs": [
+    ".git", ".venv", "venv", "env", "__pycache__", ".pytest_cache",
+    ".mypy_cache", ".ruff_cache", ".tox", ".eggs", "node_modules",
+    "dist", "build", "target", ".idea", ".vscode", ".parcompute-worker-space",
+    ".ipynb_checkpoints", "coverage", "htmlcov", "tmp", "temp",
+    "logs", "data", "output", "outputs", "artifacts/generated",
+    "generated", "cache", "caches", ".claude/state/workspace-intelligence"
+  ],
+  "sensitive_file_patterns": [
+    ".env", ".env.*", "*.pem", "*.key", "*.crt", "*.p12", "*.pfx",
+    "id_rsa", "id_ed25519", "credentials*", "secrets*", "token*",
+    "*token*", "*secret*", "*password*", "kubeconfig", ".netrc",
+    "service-account*.json", "google-credentials*.json", "aws_credentials"
+  ],
+  "max_file_size_bytes": 1000000,
+  "max_text_index_bytes": 1000000,
+  "content_hash_for_small_files": true,
+  "content_hash_max_bytes": 262144,
+  "full_hash_for_changed_candidates": false,
+  "incremental": true,
+  "parallel_workers": "auto",
+  "write_human_summaries": true,
+  "write_machine_indexes": true,
+  "write_sparse_index": true,
+  "write_vector_index": false,
+  "vector_index_backend": "optional_local_only",
+  "vector_embedding_backend": "disabled_by_default",
+  "vector_embedding_model": null,
+  "fail_on_secret_match": false,
+  "graph_show_file_nodes": "important_only",
+  "important_file_rules": [
+    "assets", "schemas", "validators", "tests", "agents", "rules",
+    "tools", "configs", "workflow_manifests", "feature_files"
+  ],
+  "query_max_results": 20,
+  "query_default_mode": "hybrid",
+  "atomic_writes": true,
+  "fts5_sync": true
+}

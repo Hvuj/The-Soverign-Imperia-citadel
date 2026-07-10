@@ -1,0 +1,37 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "workspace-dir.schema.json",
+  "title": "WorkspaceDir",
+  "description": "Schema for /api/workspace/dir response.",
+  "type": "object",
+  "required": ["dir_id", "repo_id", "path", "children", "files", "modules"],
+  "properties": {
+    "dir_id": { "type": "string" },
+    "repo_id": { "type": "string" },
+    "path": { "type": "string" },
+    "children": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Child directory IDs."
+    },
+    "files": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "File IDs in this directory."
+    },
+    "modules": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Module names in this directory."
+    },
+    "feature_tags": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "test_count": { "type": "integer", "minimum": 0 },
+    "common_imports": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  }
+}

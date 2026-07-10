@@ -1,0 +1,14 @@
+{
+  "capsules": {
+    "feature_implementation": {
+      "exclude_patterns": [
+        "*.md",
+        "*.py"
+      ],
+      "utilization_history": [
+        0.25,
+        1.0
+      ]
+    }
+  }
+}

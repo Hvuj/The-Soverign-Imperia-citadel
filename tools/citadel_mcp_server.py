@@ -1,0 +1,169 @@
+#!/usr/bin/env python3
+"""citadel_mcp_server.py — The Sovereign Imperia Citadel Z's own MCP server (stdlib stdio JSON-RPC 2.0).
+
+Exposes Legion's read-only, zero-token capabilities as MCP tools so any MCP client — Claude Code,
+the Claude CLI, the API, or Claude Cowork — can query the brain, reuse index, bug ledger, workspace
+discovery, sharded graph, and run governed read-only shell/grep. No third-party MCP SDK is required;
+this implements the MCP stdio transport (newline-delimited JSON-RPC) directly.
+
+Register in .mcp.json (project) or Claude Code settings `mcpServers`:
+  { "mcpServers": { "sovereign-imperia-citadel": { "command": "python3",
+      "args": ["tools/citadel_mcp_server.py"] } } }
+
+Safety contract: never_call_claude; every tool is read-only (shell tool delegates to
+legion_shell.py's default-deny gate).
+"""
+
+import json
+import sys
+
+import legion_shell
+import prompt_usage_miner
+from _brain_common import ROOT, STATE, load_json
+
+PROTOCOL_VERSION = "2024-11-05"
+SERVER_INFO = {"name": "sovereign-imperia-citadel", "version": "1.0.0"}
+
+
+def _t_prompt_usage(args: dict) -> dict:
+    return prompt_usage_miner.lookup(args.get("text", "")) or {"miss": True}
+
+
+def _t_bug_ledger(_args: dict) -> dict:
+    rollup = load_json(STATE / "bug-ledger.json", {})
+    open_recs = [r for r in rollup.values() if r.get("status") == "open"]
+    return {"total": len(rollup), "open": len(open_recs),
+            "records": sorted(open_recs, key=lambda r: -r.get("count", 0))[:20]}
+
+
+def _t_workspace_repos(_args: dict) -> dict:
+    idx = load_json(STATE / "workspace-intelligence" / "repo-index.json", {})
+    repos = [k for k in idx if k != "build_id"]
+    return {"repo_count": len(repos), "repos": sorted(repos)}
+
+
+def _t_bi_index(_args: dict) -> dict:
+    idx = load_json(STATE / "bi-logic-index.json", {})
+    return {"record_count": idx.get("record_count", 0), "by_kind": idx.get("by_kind", {})}
+
+
+def _t_self_heal_status(_args: dict) -> dict:
+    log = STATE / "self-heal.ndjson"
+    if not log.exists():
+        return {"runs": 0}
+    last = ""
+    for line in log.read_text(encoding="utf-8").splitlines():
+        if line.strip():
+            last = line
+    try:
+        return json.loads(last) if last else {"runs": 0}
+    except json.JSONDecodeError:
+        return {"runs": 0}
+
+
+def _t_graph_shard(args: dict) -> dict:
+    repo = args.get("repo", "")
+    index = load_json(ROOT / "docs" / "brain" / "graph-shard-index.json", {})
+    if not repo:
+        return {"repos": sorted(index.keys()), "shard_count": len(index)}
+    meta = index.get(repo)
+    if not meta:
+        return {"miss": True, "repo": repo}
+    shard = load_json(ROOT / meta["path"], {})
+    return {"repo": repo, "node_count": meta.get("node_count", 0),
+            "by_type": meta.get("by_type", {}), "nodes": shard.get("nodes", [])[:30]}
+
+
+def _t_shell(args: dict) -> dict:
+    cmd = args.get("command", [])
+    if isinstance(cmd, str):
+        cmd = cmd.split()
+    return legion_shell.run(cmd)
+
+
+TOOLS = [
+    {"name": "legion_prompt_usage_lookup",
+     "description": "Learned prompt->context bundle (intent/unit/labels) for a prompt, or miss.",
+     "inputSchema": {"type": "object", "properties": {"text": {"type": "string"}},
+                     "required": ["text"]},
+     "handler": _t_prompt_usage},
+    {"name": "legion_bug_ledger",
+     "description": "Open bug records from the bug-record company (deduped, ranked).",
+     "inputSchema": {"type": "object", "properties": {}},
+     "handler": _t_bug_ledger},
+    {"name": "legion_workspace_repos",
+     "description": "All discovered workspace repos (workspace-agnostic).",
+     "inputSchema": {"type": "object", "properties": {}},
+     "handler": _t_workspace_repos},
+    {"name": "legion_bi_index",
+     "description": "Discovered BI-logic signal counts by kind.",
+     "inputSchema": {"type": "object", "properties": {}},
+     "handler": _t_bi_index},
+    {"name": "legion_self_heal_status",
+     "description": "Latest init self-heal run summary.",
+     "inputSchema": {"type": "object", "properties": {}},
+     "handler": _t_self_heal_status},
+    {"name": "legion_graph_shard",
+     "description": "O(1) sharded brain graph: list repos, or a repo's shard nodes (arg: repo).",
+     "inputSchema": {"type": "object", "properties": {"repo": {"type": "string"}}},
+     "handler": _t_graph_shard},
+    {"name": "legion_shell",
+     "description": "Run a governed READ-ONLY shell/grep command (default-deny; mutating refused).",
+     "inputSchema": {"type": "object",
+                     "properties": {"command": {"type": "array", "items": {"type": "string"}}},
+                     "required": ["command"]},
+     "handler": _t_shell},
+]
+_BY_NAME = {t["name"]: t for t in TOOLS}
+
+
+def handle_request(req: dict) -> dict | None:
+    method = req.get("method")
+    req_id = req.get("id")
+    if method == "initialize":
+        result = {"protocolVersion": PROTOCOL_VERSION,
+                  "capabilities": {"tools": {}}, "serverInfo": SERVER_INFO}
+    elif method in ("notifications/initialized", "initialized"):
+        return None
+    elif method == "ping":
+        result = {}
+    elif method == "tools/list":
+        result = {"tools": [{"name": t["name"], "description": t["description"],
+                             "inputSchema": t["inputSchema"]} for t in TOOLS]}
+    elif method == "tools/call":
+        params = req.get("params", {})
+        name = params.get("name", "")
+        tool = _BY_NAME.get(name)
+        if not tool:
+            return _error(req_id, -32602, f"unknown tool: {name}")
+        try:
+            payload = tool["handler"](params.get("arguments", {}) or {})
+        except Exception as exc:
+            return _error(req_id, -32603, f"tool error: {exc}")
+        result = {"content": [{"type": "text", "text": json.dumps(payload, default=str)}]}
+    else:
+        return _error(req_id, -32601, f"method not found: {method}")
+    return {"jsonrpc": "2.0", "id": req_id, "result": result}
+
+
+def _error(req_id, code: int, message: str) -> dict:
+    return {"jsonrpc": "2.0", "id": req_id, "error": {"code": code, "message": message}}
+
+
+def serve() -> None:
+    for line in sys.stdin:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            req = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        resp = handle_request(req)
+        if resp is not None:
+            sys.stdout.write(json.dumps(resp) + "\n")
+            sys.stdout.flush()
+
+
+if __name__ == "__main__":
+    serve()

@@ -1,0 +1,575 @@
+/* ------------------------------------------------------------------ */
+/* Citadel Workspace Intelligence UI — CSS v=20260608-workspace-intel   */
+/* Shares color/font variables with graph.css; scrollable page layout */
+/* ------------------------------------------------------------------ */
+
+:root {
+  --topbar-height: 58px;
+  --bg: #030611;
+  --panel: rgba(6, 12, 28, 0.96);
+  --border: rgba(92, 225, 255, 0.15);
+  --border-strong: rgba(92, 225, 255, 0.36);
+  --text: #e7f3ff;
+  --muted: #89a2bd;
+  --faint: #536579;
+  --cyan: #24d7ff;
+  --violet: #a78bfa;
+  --green: #36d399;
+  --yellow: #fbbf24;
+  --red: #fb7185;
+  --blue: #38bdf8;
+  --orange: #fb923c;
+  --shadow: 0 8px 32px rgba(0,0,0,0.40), 0 0 20px rgba(36,215,255,0.06);
+  --radius: 16px;
+  --radius-sm: 10px;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  min-height: 100vh;
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 13px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+/* Subtle background grid (decorative) */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background:
+    radial-gradient(circle at 15% 10%, rgba(36,215,255,0.09), transparent 28%),
+    radial-gradient(circle at 80% 8%,  rgba(167,139,250,0.07), transparent 26%),
+    linear-gradient(180deg, #030611 0%, #050814 60%, #030611 100%);
+}
+
+body > * { position: relative; z-index: 1; }
+
+/* ---------- Topbar ------------------------------------------------- */
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: var(--topbar-height);
+  padding: 0 20px;
+  background: rgba(3, 6, 17, 0.92);
+  border-bottom: 1px solid var(--border);
+  backdrop-filter: blur(12px);
+}
+
+.topbar-logo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--cyan);
+  text-decoration: none;
+  letter-spacing: 0.02em;
+  flex-shrink: 0;
+}
+
+.topbar-logo .logo-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--cyan);
+  box-shadow: 0 0 8px var(--cyan);
+  flex-shrink: 0;
+}
+
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--muted);
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.breadcrumb a {
+  color: var(--cyan);
+  text-decoration: none;
+  transition: opacity 0.15s;
+}
+.breadcrumb a:hover { opacity: 0.8; text-decoration: underline; }
+
+.breadcrumb .sep { color: var(--faint); }
+
+.breadcrumb .crumb-current {
+  color: var(--text);
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+/* ---------- Page layout -------------------------------------------- */
+
+.page-shell {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 28px 24px 60px;
+}
+
+.page-header {
+  margin-bottom: 24px;
+}
+
+.page-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text);
+  margin: 0 0 4px;
+  letter-spacing: -0.01em;
+}
+
+.page-subtitle {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+/* ---------- Cards -------------------------------------------------- */
+
+.card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px 20px;
+  margin-bottom: 18px;
+  box-shadow: var(--shadow);
+}
+
+.card-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  margin: 0 0 12px;
+}
+
+/* ---------- Repo cards grid --------------------------------------- */
+
+.repo-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 14px;
+  margin-bottom: 24px;
+}
+
+.repo-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+  text-decoration: none;
+  color: inherit;
+  display: block;
+  transition: border-color 0.15s, box-shadow 0.15s, transform 0.1s;
+  cursor: pointer;
+}
+
+.repo-card:hover {
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow);
+  transform: translateY(-1px);
+}
+
+.repo-card-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--cyan);
+  margin-bottom: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.repo-card-path {
+  font-size: 11px;
+  color: var(--faint);
+  margin-bottom: 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: ui-monospace, "Cascadia Code", "Source Code Pro", Menlo, monospace;
+}
+
+.repo-card-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* ---------- Badges ------------------------------------------------ */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 20px;
+  border: 1px solid;
+  white-space: nowrap;
+}
+
+.badge-cyan   { color: var(--cyan);   border-color: rgba(36,215,255,0.35); background: rgba(36,215,255,0.08); }
+.badge-violet { color: var(--violet); border-color: rgba(167,139,250,0.35); background: rgba(167,139,250,0.08); }
+.badge-green  { color: var(--green);  border-color: rgba(54,211,153,0.35); background: rgba(54,211,153,0.08); }
+.badge-yellow { color: var(--yellow); border-color: rgba(251,191,36,0.35); background: rgba(251,191,36,0.08); }
+.badge-red    { color: var(--red);    border-color: rgba(251,113,133,0.35); background: rgba(251,113,133,0.08); }
+.badge-blue   { color: var(--blue);   border-color: rgba(56,189,248,0.35); background: rgba(56,189,248,0.08); }
+.badge-orange { color: var(--orange); border-color: rgba(251,146,60,0.35); background: rgba(251,146,60,0.08); }
+.badge-muted  { color: var(--muted);  border-color: var(--border); background: transparent; }
+
+/* ---------- Sections / lists -------------------------------------- */
+
+.section {
+  margin-bottom: 24px;
+}
+
+.section-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.section-title .count {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--faint);
+}
+
+.item-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.item-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  transition: background 0.12s;
+  cursor: default;
+}
+
+.item-list li:hover { background: rgba(92, 225, 255, 0.05); }
+
+.item-link {
+  color: var(--cyan);
+  text-decoration: none;
+  font-weight: 500;
+  transition: opacity 0.15s;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.item-link:hover { opacity: 0.8; text-decoration: underline; }
+
+.item-meta {
+  color: var(--faint);
+  font-size: 11px;
+  flex-shrink: 0;
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+.item-summary {
+  color: var(--muted);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+
+.item-path {
+  font-family: ui-monospace, "Cascadia Code", "Source Code Pro", Menlo, monospace;
+  font-size: 11px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+
+/* ---------- Stats row --------------------------------------------- */
+
+.stats-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.stat-chip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 8px 14px;
+  background: rgba(36,215,255,0.05);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  min-width: 70px;
+}
+
+.stat-chip .val {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--cyan);
+  line-height: 1.1;
+}
+
+.stat-chip .lbl {
+  font-size: 10px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  margin-top: 2px;
+}
+
+/* ---------- Search / input ---------------------------------------- */
+
+.search-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.search-input {
+  flex: 1;
+  min-width: 220px;
+  height: 38px;
+  padding: 0 14px;
+  background: rgba(6, 12, 28, 0.9);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: 13px;
+  transition: border-color 0.15s;
+}
+.search-input:focus { outline: none; border-color: var(--border-strong); }
+.search-input::placeholder { color: var(--faint); }
+
+.btn {
+  height: 38px;
+  padding: 0 16px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--cyan);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, border-color 0.15s;
+}
+.btn:hover { background: rgba(36,215,255,0.08); }
+
+.btn-secondary {
+  color: var(--muted);
+  border-color: var(--border);
+}
+.btn-secondary:hover { background: rgba(92,225,255,0.04); }
+
+.btn-sm {
+  height: 28px;
+  padding: 0 10px;
+  font-size: 11px;
+}
+
+/* ---------- Ask Citadel chips --------------------------------------- */
+
+.ask-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.ask-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 12px;
+  background: rgba(167,139,250,0.08);
+  border: 1px solid rgba(167,139,250,0.28);
+  border-radius: 20px;
+  color: var(--violet);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  white-space: nowrap;
+}
+.ask-chip:hover { background: rgba(167,139,250,0.16); border-color: rgba(167,139,250,0.5); }
+
+/* ---------- Ask Citadel response panel ------------------------------ */
+
+.ask-panel {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  width: 420px;
+  max-width: calc(100vw - 48px);
+  max-height: 55vh;
+  background: var(--panel);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: 0 16px 60px rgba(0,0,0,0.55), 0 0 40px rgba(167,139,250,0.1);
+  display: none;
+  flex-direction: column;
+  z-index: 100;
+  overflow: hidden;
+}
+
+.ask-panel.open { display: flex; }
+
+.ask-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.ask-panel-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--violet);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+}
+
+.ask-panel-close {
+  background: none;
+  border: none;
+  color: var(--faint);
+  font-size: 16px;
+  cursor: pointer;
+  padding: 2px 4px;
+  line-height: 1;
+}
+.ask-panel-close:hover { color: var(--text); }
+
+.ask-panel-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px 16px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text);
+}
+
+.ask-panel-thinking {
+  color: var(--muted);
+  font-style: italic;
+}
+
+/* ---------- Mono / code ------------------------------------------- */
+
+code, .mono {
+  font-family: ui-monospace, "Cascadia Code", "Source Code Pro", Menlo, monospace;
+  font-size: 11px;
+  background: rgba(36,215,255,0.07);
+  border-radius: 4px;
+  padding: 1px 5px;
+  color: var(--cyan);
+}
+
+/* ---------- Pagination -------------------------------------------- */
+
+.pagination {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.pagination .btn { font-size: 11px; }
+.pagination .page-info { flex: 1; text-align: center; }
+
+/* ---------- Loading / error states -------------------------------- */
+
+.loading-msg {
+  color: var(--muted);
+  font-style: italic;
+  padding: 20px 0;
+  text-align: center;
+}
+
+.error-msg {
+  color: var(--red);
+  background: rgba(251,113,133,0.07);
+  border: 1px solid rgba(251,113,133,0.2);
+  border-radius: var(--radius-sm);
+  padding: 12px 16px;
+  font-size: 12px;
+}
+
+/* ---------- Tech badges (the orchestrator / schema validation / Parallel-compute / dataframe lib) ------- */
+
+.tech-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+/* ---------- Horizontal rule --------------------------------------- */
+
+hr.section-sep {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 20px 0;
+}
+
+/* ---------- Responsive ------------------------------------------- */
+
+@media (max-width: 640px) {
+  .page-shell { padding: 16px 12px 40px; }
+  .repo-grid  { grid-template-columns: 1fr; }
+  .stats-row  { gap: 8px; }
+  .ask-panel  { width: 100%; right: 0; bottom: 0; border-radius: var(--radius) var(--radius) 0 0; }
+}

@@ -1,0 +1,30 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "provenance-span",
+  "title": "ProvenanceSpan",
+  "description": "Exact byte range in an immutable Bronze source. Anchors every claim to verifiable evidence.",
+  "type": "object",
+  "required": ["source_hash", "char_start", "char_end"],
+  "properties": {
+    "source_hash": {
+      "type": "string",
+      "description": "SHA-256 hex of the Bronze source canonical bytes",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "char_start": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Inclusive start character offset in the canonicalized source"
+    },
+    "char_end": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Exclusive end character offset (char_end > char_start)"
+    },
+    "source_path": {
+      "type": "string",
+      "description": "Relative path to the Bronze source file (informational, hash is authoritative)"
+    }
+  },
+  "additionalProperties": false
+}

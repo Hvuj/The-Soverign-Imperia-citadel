@@ -1,0 +1,107 @@
+{
+  "version": 2,
+  "comment": "Model/effort tier policy. Main loop starts on haiku+lowest effort; escalates mid-session via slash commands only (/model sonnet|opus, /effort ultracode). Subagents use per_agent_tiers. State-buffer handoff enables lossless model/effort switch.",
+
+  "valid_tiers": ["cheap", "standard", "strong-planning", "ultracode-escalation-allowed"],
+
+  "per_agent_tiers": {
+    "_comment": "Concrete model+effort recommendations per agent type. Used by model_effort_scheduler.schedule_agent().",
+    "cheap":           {"model": "claude-haiku-4-5-20251001", "effort": "low"},
+    "standard":        {"model": "claude-sonnet-4-6",         "effort": "medium"},
+    "strong-planning": {"model": "claude-opus-4-8",           "effort": "high"},
+    "ultracode":       {"model": "claude-opus-4-8[1m]",       "effort": "max"}
+  },
+
+  "haiku_eligible_agents": {
+    "_comment": "These agents always run on Haiku regardless of task tier. Routing/auditing/classification only — never deep reasoning.",
+    "agents": [
+      "agent-budget-controller", "brain-router", "brain-search-router",
+      "cache-key-guardian", "cache-performance-auditor", "context-preservation-agent",
+      "directory-access-sentinel", "directory-change-detector", "efficiency-auditor",
+      "effort-decider", "gitignore-safety-reviewer", "memory-optimizer",
+      "pattern-reuse-router", "prompt-classifier-agent", "reuse-fast-path-agent",
+      "scope-guard", "scope-guard-agent", "state-ledger", "task-queue-manager",
+      "telemetry-auditor", "token-efficiency-auditor", "worker-result-reducer",
+      "workload-balancer"
+    ]
+  },
+
+  "escalation_tiers": {
+    "_comment": "When an agent at tier X stalls or fails, re-spawn at the next tier.",
+    "cheap":           "standard",
+    "standard":        "strong-planning",
+    "strong-planning": "ultracode"
+  },
+
+  "state_buffer": {
+    "_comment": "Agent state buffer config for lossless model/effort handoff.",
+    "enabled": true,
+    "buffer_path": ".claude/state/agent-buffers",
+    "auto_checkpoint_on_stall": true,
+    "stall_after_turns": 5,
+    "max_buffer_chars": 8000
+  },
+
+  "complexity_keywords": {
+    "high": [
+      "architecture", "redesign", "multi-file", "risky", "graph brain",
+      "refactor entire", "migrate", "overhaul", "ambiguous", "unclear requirements",
+      "distributed", "production risk", "breaking change"
+    ],
+    "medium": [
+      "implement", "feature", "add logic", "update", "extend", "integrate",
+      "join strategy", "contract", "performance", "validation"
+    ]
+  },
+
+  "task_type_tiers": {
+    "terminal_help":    {"planning": "cheap",           "execution": "cheap",  "review": "cheap",  "planning_effort": "cheap", "execution_effort": "cheap", "review_effort": "cheap",  "plan_frozen": true,  "cheap_execution_allowed": true},
+    "question":         {"planning": "cheap",           "execution": "cheap",  "review": "cheap",  "planning_effort": "cheap", "execution_effort": "cheap", "review_effort": "cheap",  "plan_frozen": true,  "cheap_execution_allowed": true},
+    "docstring_only":   {"planning": "cheap",           "execution": "cheap",  "review": "cheap",  "planning_effort": "cheap", "execution_effort": "cheap", "review_effort": "cheap",  "plan_frozen": true,  "cheap_execution_allowed": true},
+    "validation_only":  {"planning": "cheap",           "execution": "cheap",  "review": "cheap",  "planning_effort": "cheap", "execution_effort": "cheap", "review_effort": "cheap",  "plan_frozen": false, "cheap_execution_allowed": true},
+    "docs_ingestion":   {"planning": "cheap",           "execution": "cheap",  "review": "cheap",  "planning_effort": "cheap", "execution_effort": "cheap", "review_effort": "cheap",  "plan_frozen": true,  "cheap_execution_allowed": true},
+    "test_creation":    {"planning": "standard",        "execution": "cheap",  "review": "standard","planning_effort": "standard", "execution_effort": "cheap", "review_effort": "standard", "plan_frozen": false, "cheap_execution_allowed": true},
+    "data_contract":    {"planning": "standard",        "execution": "cheap",  "review": "standard","planning_effort": "standard", "execution_effort": "cheap", "review_effort": "standard", "plan_frozen": false, "cheap_execution_allowed": true},
+    "sql":              {"planning": "standard",        "execution": "cheap",  "review": "standard","planning_effort": "standard", "execution_effort": "cheap", "review_effort": "standard", "plan_frozen": false, "cheap_execution_allowed": true},
+    "feature_change":   {"planning": "strong-planning", "execution": "cheap",  "review": "standard","planning_effort": "standard", "execution_effort": "cheap", "review_effort": "standard", "plan_frozen": false, "cheap_execution_allowed": true},
+    "bug_fix":          {"planning": "strong-planning", "execution": "cheap",  "review": "standard","planning_effort": "standard", "execution_effort": "cheap", "review_effort": "standard", "plan_frozen": false, "cheap_execution_allowed": true},
+    "refactor":         {"planning": "strong-planning", "execution": "cheap",  "review": "standard","planning_effort": "standard", "execution_effort": "cheap", "review_effort": "standard", "plan_frozen": false, "cheap_execution_allowed": true},
+    "debugging":        {"planning": "strong-planning", "execution": "standard","review": "standard","planning_effort": "standard", "execution_effort": "standard","review_effort": "standard","plan_frozen": false, "cheap_execution_allowed": false},
+    "orchestration":          {"planning": "strong-planning", "execution": "cheap",  "review": "standard","planning_effort": "standard", "execution_effort": "cheap", "review_effort": "standard", "plan_frozen": false, "cheap_execution_allowed": true},
+    "parcompute":             {"planning": "strong-planning", "execution": "standard","review": "standard","planning_effort": "standard", "execution_effort": "standard","review_effort": "standard","plan_frozen": false, "cheap_execution_allowed": false},
+    "bi_logic":         {"planning": "strong-planning", "execution": "standard","review": "standard","planning_effort": "standard", "execution_effort": "standard","review_effort": "standard","plan_frozen": false, "cheap_execution_allowed": false},
+    "graph_brain_tooling":{"planning": "strong-planning","execution": "cheap", "review": "standard","planning_effort": "standard", "execution_effort": "cheap", "review_effort": "standard", "plan_frozen": false, "cheap_execution_allowed": true}
+  },
+
+  "complexity_overrides": {
+    "comment": "High-complexity keywords upgrade planning tier from standard→strong-planning; never downgrade.",
+    "high_upgrades_planning_to": "strong-planning",
+    "high_flags_escalation": true
+  },
+
+  "escalation_policy": {
+    "comment": "Ultracode escalation is allowed only when one of these triggers is present. Escalation must be documented in the manifest escalation_policy field, never emitted as a /effort command.",
+    "allowed_triggers": [
+      "ambiguity: requirements are unclear or contradictory",
+      "failed_validation: validation keeps failing after standard-effort attempts",
+      "unsafe_scope: planned edit appears to touch production risk paths",
+      "architecture_risk: change could affect multiple systems or data contracts",
+      "unclear_requirements: user intent cannot be determined deterministically"
+    ],
+    "forbidden_escalation_targets": [
+      "/effort low", "/effort medium", "/effort high", "/effort xhigh", "/effort max",
+      "/model sonnet", "/model haiku", "/model opus"
+    ]
+  },
+
+  "default_tiers": {
+    "planning": "standard",
+    "execution": "cheap",
+    "review": "standard",
+    "planning_effort": "standard",
+    "execution_effort": "cheap",
+    "review_effort": "standard",
+    "plan_frozen": false,
+    "cheap_execution_allowed": true
+  }
+}

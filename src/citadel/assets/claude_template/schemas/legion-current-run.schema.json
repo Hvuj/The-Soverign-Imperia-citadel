@@ -1,0 +1,14 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "legion-current-run.schema.json",
+  "title": "Legion Current-Run Pointer",
+  "description": "Pointer to the most recently started `citadel run` (.claude/state/legion-runs/current-run.json), written by tools/legion_run_state.init_run. Read-only tools (worker_status, statusline) use it to locate live run state without an explicit --run-id.",
+  "type": "object",
+  "required": ["run_id", "task", "started_at"],
+  "additionalProperties": false,
+  "properties": {
+    "run_id": {"type": "string", "description": "Run id, e.g. run_1783092545_eb2472b6."},
+    "task": {"type": "string", "description": "The task string this run is executing."},
+    "started_at": {"type": "number", "description": "Float epoch seconds (time.time()) at run start — NOT a date-time string."}
+  }
+}

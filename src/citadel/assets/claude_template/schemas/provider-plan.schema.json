@@ -1,0 +1,35 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "provider-plan.schema.json",
+  "title": "ProviderPlan",
+  "description": "Schema for AI provider implementation plans.",
+  "type": "object",
+  "required": ["plan_id", "provider", "steps", "allowed_files", "created_at"],
+  "properties": {
+    "plan_id": { "type": "string" },
+    "provider": { "type": "string", "enum": ["claude_code", "cowork", "anthropic_sdk", "local"] },
+    "task_id": { "type": "string" },
+    "steps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["step_id", "description"],
+        "properties": {
+          "step_id": { "type": "string" },
+          "description": { "type": "string" },
+          "files": { "type": "array", "items": { "type": "string" } },
+          "commands": { "type": "array", "items": { "type": "string" } },
+          "risks": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    "allowed_files": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "summary": { "type": "string" },
+    "risks": { "type": "array", "items": { "type": "string" } },
+    "created_at": { "type": "string", "format": "date-time" },
+    "evidence": { "type": "array", "items": { "type": "string" } }
+  }
+}

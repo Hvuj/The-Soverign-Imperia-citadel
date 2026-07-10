@@ -1,0 +1,41 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "workspace-file.schema.json",
+  "title": "WorkspaceFile",
+  "description": "Schema for /api/workspace/file response (metadata only, no content).",
+  "type": "object",
+  "required": ["file_id", "repo_id", "path", "size_bytes", "content_hash"],
+  "properties": {
+    "file_id": { "type": "string" },
+    "repo_id": { "type": "string" },
+    "path": { "type": "string" },
+    "relative_path": { "type": "string" },
+    "size_bytes": { "type": "integer", "minimum": 0 },
+    "content_hash": { "type": "string" },
+    "extension": { "type": "string" },
+    "language": { "type": "string" },
+    "line_count": { "type": "integer", "minimum": 0 },
+    "imports": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "symbols": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "tests": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "related_features": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "reuse_candidates": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "is_test": { "type": "boolean" },
+    "is_config": { "type": "boolean" }
+  }
+}

@@ -1,0 +1,71 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "claim-verification.schema.json",
+  "title": "ClaimVerification",
+  "description": "Schema for grounding_claim_verifier.py output — classifies factual claims against evidence.",
+  "type": "object",
+  "required": ["claims", "evidence_ledger", "enabled", "unsupported_claims_removed"],
+  "properties": {
+    "enabled": { "type": "boolean" },
+    "unsupported_claims_removed": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Count of claims removed/marked because they lacked evidence."
+    },
+    "claims": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["text", "classification"],
+        "properties": {
+          "text": { "type": "string" },
+          "classification": {
+            "type": "string",
+            "enum": [
+              "supported",
+              "partially_supported",
+              "unsupported",
+              "contradicted",
+              "unverifiable"
+            ]
+          },
+          "evidence_refs": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "note": { "type": "string" }
+        }
+      }
+    },
+    "evidence_ledger": {
+      "type": "object",
+      "required": [
+        "evidence_used",
+        "assumptions",
+        "missing_evidence",
+        "validation_run",
+        "source_scope",
+        "confidence"
+      ],
+      "properties": {
+        "evidence_used": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "assumptions": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "missing_evidence": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "validation_run": { "type": "boolean" },
+        "unsupported_claims_removed": { "type": "integer", "minimum": 0 },
+        "source_scope": { "type": "string" },
+        "freshness": { "type": "string" },
+        "confidence": { "type": "string", "enum": ["high", "medium", "low"] }
+      }
+    }
+  }
+}

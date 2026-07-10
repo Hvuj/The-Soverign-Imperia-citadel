@@ -1,0 +1,14 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "CanaryPair",
+  "type": "object",
+  "properties": {
+    "canary_id": { "type": "string", "pattern": "^cnr_[a-f0-9]{8}$" },
+    "question": { "type": "string" },
+    "expected_answer_keys": { "type": "array", "items": { "type": "string" } },
+    "min_match_score": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+    "corpus": { "type": "string", "enum": ["code", "knowledge", "bugs"] }
+  },
+  "required": ["canary_id", "question", "expected_answer_keys", "min_match_score", "corpus"],
+  "additionalProperties": false
+}

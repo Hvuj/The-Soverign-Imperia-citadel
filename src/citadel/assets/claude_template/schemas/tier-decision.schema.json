@@ -1,0 +1,18 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "TierDecision",
+  "type": "object",
+  "properties": {
+    "decision_id": { "type": "string", "pattern": "^dec_[a-f0-9]{12}$" },
+    "task_id": { "type": "string" },
+    "tier": { "type": "integer", "enum": [0, 1, 2, 3, 4] },
+    "deciding_member": { "type": "string" },
+    "conflict_set": { "type": "array", "items": { "type": "string" } },
+    "precedence_rule_applied": { "type": "string" },
+    "deciding_factor": { "type": "string" },
+    "reasoning_hash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "timestamp": { "type": "integer" }
+  },
+  "required": ["decision_id", "task_id", "tier", "deciding_member", "conflict_set", "precedence_rule_applied", "deciding_factor", "reasoning_hash", "timestamp"],
+  "additionalProperties": false
+}

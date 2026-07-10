@@ -1,0 +1,39 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "feature-improvement.schema.json",
+  "title": "Feature Improvement Proposal",
+  "description": "A zero-token improvement proposal produced by zombie workers / pipeline-walker and scored RICE-style. Approved proposals promote a card into feature-implementation-patterns.md.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "title", "source", "status", "rice", "rice_score", "timestamp"],
+  "properties": {
+    "id": {"type": "string", "pattern": "^fi_[a-f0-9]{12}$"},
+    "title": {"type": "string"},
+    "source": {"type": "string", "enum": ["zombie", "pipeline-walker", "manual"]},
+    "target": {"type": "string", "description": "Repo / file / asset the improvement applies to."},
+    "scope_e2e": {"type": "string", "description": "End-to-end scope of the change."},
+    "why": {"type": "string"},
+    "how": {"type": "array", "items": {"type": "string"}, "description": "Smallest-detail steps."},
+    "est_time_hours": {"type": "number", "minimum": 0},
+    "expected_gain": {"type": "string"},
+    "perf_scale_reasoning": {"type": "string"},
+    "pipeline_perf_recommendation": {"type": "string"},
+    "cost": {"type": "number", "minimum": 0, "description": "Estimated cost (USD or relative units)."},
+    "rice": {
+      "type": "object", "additionalProperties": false,
+      "required": ["reach", "impact", "confidence", "effort"],
+      "properties": {
+        "reach": {"type": "number", "minimum": 0},
+        "impact": {"type": "number", "minimum": 0},
+        "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+        "effort": {"type": "number", "minimum": 0.1}
+      }
+    },
+    "rice_score": {"type": "number", "minimum": 0},
+    "status": {"type": "string", "enum": ["proposed", "approved", "rejected", "implemented"]},
+    "review_reason": {"type": ["string", "null"]},
+    "reasoning_hash": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "timestamp": {"type": "integer"},
+    "evidence": {"type": "object", "description": "Deterministic signals backing the proposal (lint counts, durations, complexity)."}
+  }
+}

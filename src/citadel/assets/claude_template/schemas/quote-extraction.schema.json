@@ -1,0 +1,33 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "quote-extraction.schema.json",
+  "title": "QuoteExtraction",
+  "description": "Schema for grounding_quote_extractor.py output.",
+  "type": "object",
+  "required": ["quotes", "source_scope", "no_quotes_found"],
+  "properties": {
+    "no_quotes_found": {
+      "type": "boolean",
+      "description": "True when no relevant quotes were found. quotes array will be empty."
+    },
+    "source_scope": {
+      "type": "string",
+      "description": "Description of the source(s) searched."
+    },
+    "query": { "type": "string" },
+    "quotes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["text", "source_path"],
+        "properties": {
+          "text": { "type": "string" },
+          "source_path": { "type": "string" },
+          "heading": { "type": ["string", "null"] },
+          "line": { "type": ["integer", "null"] },
+          "relevance_score": { "type": "number" }
+        }
+      }
+    }
+  }
+}

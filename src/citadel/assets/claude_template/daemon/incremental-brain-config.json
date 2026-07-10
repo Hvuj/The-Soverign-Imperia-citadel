@@ -1,0 +1,48 @@
+{
+  "version": 6,
+  "enabled": true,
+  "mandatory": true,
+  "poll_interval_seconds": 4,
+  "debounce_seconds": 8,
+  "watch_roots": [
+    ".claude/agents",
+    ".claude/rules",
+    ".claude/skills",
+    ".claude/brain",
+    "docs/ai-context",
+    "docs/brain/nodes",
+    "tools",
+    "scripts"
+  ],
+  "ignore_parts": [
+    ".git",
+    ".venv",
+    "venv",
+    "__pycache__",
+    ".pytest_cache",
+    ".mypy_cache",
+    ".ruff_cache",
+    ".claude/state",
+    ".claude/backups",
+    "node_modules"
+  ],
+  "ignore_suffixes": [
+    ".pyc",
+    ".pyo",
+    ".so",
+    ".dylib",
+    ".dll",
+    ".parquet",
+    ".pkl",
+    ".pickle",
+    ".log",
+    ".tmp",
+    ".zip",
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".webp"
+  ],
+  "never_call_claude": true,
+  "never_edit_production_code": true
+}

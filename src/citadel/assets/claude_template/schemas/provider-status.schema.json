@@ -1,0 +1,55 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "provider-status.schema.json",
+  "title": "ProviderStatus",
+  "description": "Schema for /api/providers/status response.",
+  "type": "object",
+  "required": ["claude_code", "cowork", "anthropic_sdk", "detected_at"],
+  "properties": {
+    "detected_at": { "type": "string", "format": "date-time" },
+    "claude_code": {
+      "$ref": "#/definitions/provider_entry"
+    },
+    "cowork": {
+      "$ref": "#/definitions/provider_entry"
+    },
+    "anthropic_sdk": {
+      "$ref": "#/definitions/provider_entry"
+    },
+    "resolved": {
+      "type": "object",
+      "description": "Resolved provider per role.",
+      "properties": {
+        "ask_fallback": { "type": ["string", "null"] },
+        "plan": { "type": ["string", "null"] },
+        "execute": { "type": ["string", "null"] },
+        "review": { "type": ["string", "null"] }
+      }
+    }
+  },
+  "definitions": {
+    "provider_entry": {
+      "type": "object",
+      "required": ["available", "status"],
+      "properties": {
+        "available": { "type": "boolean" },
+        "status": { "type": "string", "enum": ["green", "yellow", "red"] },
+        "enabled": { "type": "boolean" },
+        "message": { "type": "string" },
+        "capabilities": {
+          "type": "object",
+          "properties": {
+            "qna": { "type": "boolean" },
+            "plan": { "type": "boolean" },
+            "execute": { "type": "boolean" },
+            "review": { "type": "boolean" },
+            "noninteractive": { "type": "boolean" },
+            "timeout": { "type": "boolean" },
+            "json_output": { "type": "boolean" },
+            "scoped_files": { "type": "boolean" }
+          }
+        }
+      }
+    }
+  }
+}

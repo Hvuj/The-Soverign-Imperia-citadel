@@ -1,0 +1,449 @@
+{
+  "version": 8,
+  "comment": "Execution manifest workflow registry. Consumed by tools/build_execution_manifest.py. Workspace-agnostic: ships only generic task types and workflows — domain/framework task types, specialists, and their signals are LEARNED per workspace and merged in at runtime, never hardcoded here. Artifact types/policy: see artifact-policy.json. Memory policy: see memory-policy.json. Model/effort tiers: see model-effort-config.json.",
+
+  "task_types": [
+    "feature_change", "bug_fix", "debugging", "docs_ingestion", "docstring_only",
+    "test_creation", "refactor", "graph_brain_tooling", "terminal_help", "question",
+    "data_contract", "validation_only"
+  ],
+
+  "task_type_signals": {
+    "docstring_only": {
+      "priority": 10,
+      "keywords": ["fill docstrings", "add docstrings", "write docstrings", "docstring"],
+      "patterns": ["fill\\s+docstring", "add\\s+docstring", "write\\s+docstring"]
+    },
+    "graph_brain_tooling": {
+      "priority": 9,
+      "keywords": ["execution manifest", "graph brain", "brain search", "brain routing", "brain daemon", "brain index", "manifest layer", "workflow manifest", "brain config", "capsule cache"],
+      "patterns": ["graph[\\s_-]brain", "brain[\\s_-]search", "execution[\\s_-]manifest", "capsule[\\s_-]cache", "brain[\\s_-]daemon"]
+    },
+    "test_creation": {
+      "priority": 8,
+      "keywords": ["create test", "add test", "write test", "new test"],
+      "patterns": ["create\\s+\\w*\\s*test", "add\\s+\\w*\\s*test", "write\\s+\\w*\\s*test"]
+    },
+    "terminal_help": {
+      "priority": 8,
+      "keywords": ["what command", "which command", "how do i run", "how to run", "how do i use"],
+      "patterns": ["what\\s+command\\s+(run|use|launch|open|start|serve)", "how\\s+(do\\s+i|to)\\s+run\\s+\\w+", "what\\s+is\\s+the\\s+command"]
+    },
+    "data_contract": {
+      "priority": 7,
+      "keywords": ["data contract", "schema contract", "column contract", "output shape", "row count", "null check"],
+      "patterns": ["data[\\s_-]contract", "column\\s+contract", "output\\s+shape"]
+    },
+    "docs_ingestion": {
+      "priority": 6,
+      "keywords": ["here are docs", "ingest docs", "learn this", "add documentation", "technical docs"],
+      "patterns": ["here\\s+are\\s+docs", "ingest\\s+(docs|documentation)", "learn\\s+this\\s+doc"]
+    },
+    "debugging": {
+      "priority": 5,
+      "keywords": ["debug", "traceback", "exception", "why is this failing", "what is wrong", "not working"],
+      "patterns": ["traceback.*line\\s+\\d+", "why\\s+(is|does)\\s+\\w+\\s+(fail|error|break)"]
+    },
+    "bug_fix": {
+      "priority": 5,
+      "keywords": ["fix bug", "wrong output", "incorrect result", "fix the error", "patch"],
+      "patterns": ["\\bfix\\b(?!.*docstring)", "wrong\\s+(output|result|value)", "incorrect\\s+(output|result)"]
+    },
+    "refactor": {
+      "priority": 4,
+      "keywords": ["refactor", "clean up", "simplify", "restructure", "reorganize", "rename"],
+      "patterns": ["\\brefactor\\b", "clean[\\s_-]up\\b", "\\bsimplify\\b"]
+    },
+    "validation_only": {
+      "priority": 4,
+      "keywords": ["run tests", "run validation", "execute tests", "check tests pass", "validate only"],
+      "patterns": ["(run|execute)\\s+(tests|validation|checks)\\s*$", "only\\s+(validate|test|check)"]
+    },
+    "feature_change": {
+      "priority": 7,
+      "keywords": ["feature logic", "feature contract", "add feature", "implement feature", "build feature", "new feature", "add column", "add field", "add logic", "implement logic"],
+      "patterns": ["(add|implement|build)\\s+\\w+\\s+(feature|logic|function|method|column)", "new\\s+(feature|functionality)"]
+    },
+    "question": {
+      "priority": 1,
+      "keywords": [],
+      "patterns": ["^(what|where|when|who|why|how|which|is|are|can|does|do|should|would|could|has|have)\\s"]
+    }
+  },
+
+  "comment_policy_files": "artifact_types and task_type_to_artifacts -> .claude/brain/artifact-policy.json | memory_policy_rules -> .claude/brain/memory-policy.json",
+
+  "workflows": {
+    "feature_change_workflow": {
+      "max_agents": 8,
+      "max_context_depth": 2,
+      "required_agents": ["task-planner", "data-contract-validator", "test-validation-runner", "efficiency-auditor"],
+      "optional_agents": ["python-specialist"],
+      "conditional_agents": [
+        {"agent": "feature-implementation-learner", "condition_keywords": ["reusable", "derived feature", "validation pattern", "feature logic"], "condition_desc": "when reusable feature logic, derived feature semantics, or a validation pattern changes"}
+      ],
+      "forbidden_agents_unless_explicit": [],
+      "required_skills": [],
+      "required_tools": [],
+      "required_artifacts": ["file_map", "feature_contract", "validation_checklist", "diff_summary", "validation_report"],
+      "required_validations": [
+        "python -m py_compile <changed_files>",
+        "uv run python -m pytest -x --tb=short <relevant_tests>",
+        "ruff check <changed_files>"
+      ],
+      "memory_policy": "only compact durable lessons",
+      "skip_rules": ["no broad scan agents"],
+      "stop_gate_requirements": [
+        "required agents invoked or skipped with recorded reason",
+        "required artifacts present or explicitly marked N/A",
+        "validation ran or explicitly marked N/A",
+        "memory decision made",
+        "verdict is Pass / Needs Fix / Blocked"
+      ],
+      "known_limitations": []
+    },
+
+    "bug_fix_workflow": {
+      "max_agents": 8,
+      "max_context_depth": 2,
+      "required_agents": ["task-planner", "test-validation-runner", "efficiency-auditor"],
+      "optional_agents": ["data-contract-validator", "python-specialist"],
+      "conditional_agents": [],
+      "forbidden_agents_unless_explicit": ["feature-implementation-learner"],
+      "required_skills": [],
+      "required_tools": [],
+      "required_artifacts": ["root_cause_note", "implementation_plan", "validation_checklist", "diff_summary", "validation_report"],
+      "required_validations": [
+        "python -m py_compile <changed_files>",
+        "uv run python -m pytest -x --tb=short <relevant_tests>"
+      ],
+      "memory_policy": "only if root cause reveals reusable lesson",
+      "skip_rules": ["no feature learning for bug fix"],
+      "stop_gate_requirements": [
+        "root_cause_note present",
+        "required validation ran",
+        "verdict is Pass / Needs Fix / Blocked"
+      ],
+      "known_limitations": []
+    },
+
+    "debugging_workflow": {
+      "max_agents": 8,
+      "max_context_depth": 3,
+      "required_agents": ["task-planner", "efficiency-auditor"],
+      "optional_agents": ["data-contract-validator", "python-specialist"],
+      "conditional_agents": [],
+      "forbidden_agents_unless_explicit": ["feature-implementation-learner"],
+      "required_skills": [],
+      "required_tools": [],
+      "required_artifacts": ["root_cause_note"],
+      "required_validations": [],
+      "memory_policy": "only if failure reveals reusable pitfall",
+      "skip_rules": [],
+      "stop_gate_requirements": [
+        "root_cause_note present or investigation marked complete",
+        "verdict is Pass / Needs Fix / Blocked"
+      ],
+      "known_limitations": ["implementation_plan only required if user requests fix"]
+    },
+
+    "docs_ingestion_workflow": {
+      "max_agents": 5,
+      "max_context_depth": 2,
+      "required_agents": ["task-planner", "efficiency-auditor"],
+      "optional_agents": ["memory-curator", "graph-maintainer"],
+      "conditional_agents": [
+        {"agent": "technical-doc-curator", "condition_keywords": ["technical", "api", "sdk", "library"], "condition_desc": "if docs are technical library docs"}
+      ],
+      "forbidden_agents_unless_explicit": ["feature-implementation-learner", "test-validation-runner"],
+      "required_skills": ["documentation-ingestion"],
+      "required_tools": [],
+      "required_artifacts": ["docs_ingestion_summary"],
+      "required_validations": [
+        "python tools/build_brain_search_index.py",
+        "python tools/graph_brain_lint.py"
+      ],
+      "memory_policy": "write if durable rules extracted",
+      "skip_rules": ["no feature learning", "no production tests"],
+      "stop_gate_requirements": [
+        "docs_ingestion_summary present",
+        "graph updated if needed",
+        "verdict is Pass / Needs Fix / Blocked"
+      ],
+      "known_limitations": []
+    },
+
+    "docstring_only_workflow": {
+      "max_agents": 1,
+      "max_context_depth": 1,
+      "required_agents": [],
+      "optional_agents": ["test-validation-runner"],
+      "conditional_agents": [],
+      "forbidden_agents_unless_explicit": ["feature-implementation-learner"],
+      "required_skills": [],
+      "required_tools": [],
+      "required_artifacts": [],
+      "required_validations": ["ruff check <focused_file>"],
+      "memory_policy": "skip",
+      "skip_rules": ["no feature learning", "no broad agents"],
+      "stop_gate_requirements": ["Trivial turn; no audit needed"],
+      "known_limitations": ["validation_report only if checks were actually run"]
+    },
+
+    "test_creation_workflow": {
+      "max_agents": 5,
+      "max_context_depth": 2,
+      "required_agents": ["test-validation-runner", "efficiency-auditor"],
+      "optional_agents": [],
+      "conditional_agents": [
+        {"agent": "data-contract-validator", "condition_keywords": ["schema", "columns", "contract", "row count", "nulls"], "condition_desc": "when a data contract is involved"}
+      ],
+      "forbidden_agents_unless_explicit": ["feature-implementation-learner"],
+      "required_skills": ["testing-strategy-review"],
+      "required_tools": [],
+      "required_artifacts": ["test_plan", "validation_report", "diff_summary"],
+      "required_validations": [
+        "uv run python -m pytest <new_tests> -v --tb=short",
+        "ruff check <test_files>"
+      ],
+      "memory_policy": "only if reusable test pattern discovered",
+      "skip_rules": [],
+      "stop_gate_requirements": [
+        "tests ran",
+        "validation_report present",
+        "verdict is Pass / Needs Fix / Blocked"
+      ],
+      "known_limitations": []
+    },
+
+    "refactor_workflow": {
+      "max_agents": 8,
+      "max_context_depth": 2,
+      "required_agents": ["task-planner", "test-validation-runner", "efficiency-auditor"],
+      "optional_agents": ["python-specialist", "data-contract-validator"],
+      "conditional_agents": [
+        {"agent": "feature-implementation-learner", "condition_keywords": ["reusable", "pattern", "shortcut"], "condition_desc": "if refactor reveals reusable pattern"}
+      ],
+      "forbidden_agents_unless_explicit": [],
+      "required_skills": [],
+      "required_tools": [],
+      "required_artifacts": ["implementation_plan", "diff_summary", "validation_report"],
+      "required_validations": [
+        "python -m py_compile <changed_files>",
+        "uv run python -m pytest -x --tb=short <relevant_tests>"
+      ],
+      "memory_policy": "only if reusable refactor pattern",
+      "skip_rules": [],
+      "stop_gate_requirements": [
+        "tests ran or marked N/A",
+        "verdict is Pass / Needs Fix / Blocked"
+      ],
+      "known_limitations": []
+    },
+
+    "graph_brain_tooling_workflow": {
+      "max_agents": 8,
+      "max_context_depth": 2,
+      "required_agents": ["agent-budget-controller", "brain-search-router", "context-capsule-builder", "test-validation-runner", "efficiency-auditor"],
+      "optional_agents": ["memory-curator"],
+      "conditional_agents": [
+        {"agent": "memory-curator", "condition_keywords": ["durable", "memory", "routing rule", "graph behavior"], "condition_desc": "if durable graph behavior changed"}
+      ],
+      "forbidden_agents_unless_explicit": [],
+      "required_skills": ["graph-aware-context-routing", "incremental-brain-maintenance"],
+      "required_tools": [
+        "tools/build_brain_search_index.py",
+        "tools/brain_search.py",
+        "tools/brain_context_builder.py",
+        "tools/build_execution_manifest.py",
+        "tools/execution_manifest_lint.py",
+        "tools/scheduler_lint.py",
+        "tools/model_effort_scheduler.py",
+        "tools/daemon_health_check.py",
+        "tools/mandatory_auto_lint.py",
+        "tools/graph_brain_lint.py"
+      ],
+      "required_artifacts": ["implementation_plan", "routing_update_note", "scheduler_decision_report", "validation_checklist", "validation_report", "diff_summary", "memory_candidate"],
+      "required_validations": [
+        "python tools/build_brain_search_index.py",
+        "python tools/brain_search.py '<task keywords>' --depth 2",
+        "python tools/brain_context_builder.py '<task keywords>' --mode prompt",
+        "python tools/execution_manifest_lint.py",
+        "python tools/scheduler_lint.py",
+        "python tools/claude_memory_lint.py",
+        "python tools/mandatory_auto_lint.py",
+        "python tools/graph_brain_lint.py",
+        "python tools/daemon_health_check.py"
+      ],
+      "memory_policy": "write compact durable routing/behavior lessons",
+      "skip_rules": [],
+      "stop_gate_requirements": [
+        "all required validations ran",
+        "routing_update_note present",
+        "verdict is Pass / Needs Fix / Blocked"
+      ],
+      "known_limitations": []
+    },
+
+    "terminal_help_workflow": {
+      "max_agents": 0,
+      "max_context_depth": 1,
+      "required_agents": [],
+      "optional_agents": [],
+      "conditional_agents": [],
+      "forbidden_agents_unless_explicit": ["feature-implementation-learner", "data-contract-validator", "test-validation-runner"],
+      "required_skills": [],
+      "required_tools": [],
+      "required_artifacts": [],
+      "required_validations": [],
+      "memory_policy": "skip",
+      "skip_rules": ["no agents", "no artifacts", "no memory"],
+      "stop_gate_requirements": ["Trivial turn; no audit needed"],
+      "known_limitations": []
+    },
+
+    "question_workflow": {
+      "max_agents": 0,
+      "max_context_depth": 1,
+      "required_agents": [],
+      "optional_agents": [],
+      "conditional_agents": [],
+      "forbidden_agents_unless_explicit": ["feature-implementation-learner"],
+      "required_skills": [],
+      "required_tools": [],
+      "required_artifacts": [],
+      "required_validations": [],
+      "memory_policy": "skip",
+      "skip_rules": ["no agents", "no artifacts", "no memory unless explicitly asked"],
+      "stop_gate_requirements": ["Trivial turn; no audit needed"],
+      "known_limitations": []
+    },
+
+    "data_contract_workflow": {
+      "max_agents": 6,
+      "max_context_depth": 2,
+      "required_agents": ["data-contract-validator", "test-validation-runner", "efficiency-auditor"],
+      "optional_agents": ["python-specialist"],
+      "conditional_agents": [],
+      "forbidden_agents_unless_explicit": ["feature-implementation-learner"],
+      "required_skills": [],
+      "required_tools": [],
+      "required_artifacts": ["data_contract_note", "validation_checklist", "validation_report"],
+      "required_validations": ["run schema/contract validation tests"],
+      "memory_policy": "write if durable contract rule",
+      "skip_rules": [],
+      "stop_gate_requirements": [
+        "data contract validated",
+        "verdict is Pass / Needs Fix / Blocked"
+      ],
+      "known_limitations": []
+    },
+
+    "validation_only_workflow": {
+      "max_agents": 5,
+      "max_context_depth": 1,
+      "required_agents": ["test-validation-runner", "efficiency-auditor"],
+      "optional_agents": [],
+      "conditional_agents": [],
+      "forbidden_agents_unless_explicit": ["feature-implementation-learner"],
+      "required_skills": [],
+      "required_tools": [],
+      "required_artifacts": ["validation_report"],
+      "required_validations": ["run requested validation commands"],
+      "memory_policy": "skip unless failure reveals durable lesson",
+      "skip_rules": [],
+      "stop_gate_requirements": [
+        "validation_report present",
+        "verdict is Pass / Needs Fix / Blocked"
+      ],
+      "known_limitations": []
+    }
+  },
+
+  "skill_contracts": {
+    "testing-strategy-review": {
+      "why": "ensures tests are focused, relevant, and pass/fail evidence is captured",
+      "required_steps": [
+        "identify focused tests for changed code",
+        "run focused tests with --tb=short",
+        "capture and report pass/fail evidence"
+      ],
+      "skip_conditions": ["no code files changed", "docstring-only change"],
+      "validation_expectations": ["tests ran", "output captured"],
+      "artifact_expectations": ["validation_report"]
+    },
+    "graph-aware-context-routing": {
+      "why": "selects only relevant concept nodes and agents, preventing over-invocation",
+      "required_steps": [
+        "select relevant concept nodes from graph index",
+        "select relevant capsules for context",
+        "select agent allowlist and skip unrelated domains",
+        "record routing confidence in manifest"
+      ],
+      "skip_conditions": ["trivial Q&A", "terminal help"],
+      "validation_expectations": ["routing confidence >= 0.5"],
+      "artifact_expectations": []
+    },
+    "documentation-ingestion": {
+      "why": "extracts durable reusable rules from docs without polluting production code or always-loaded memory",
+      "required_steps": [
+        "extract durable rules, pitfalls, validation notes, examples",
+        "store compact knowledge in docs/ai-context/tech-knowledge/",
+        "update relevant graph node if knowledge is discoverable",
+        "refresh brain search index and capsule cache",
+        "do not edit production code"
+      ],
+      "skip_conditions": ["no external docs provided", "docs already ingested"],
+      "validation_expectations": [
+        "python tools/build_brain_search_index.py passes",
+        "python tools/graph_brain_lint.py passes"
+      ],
+      "artifact_expectations": ["docs_ingestion_summary", "routing_update_note"]
+    },
+    "incremental-brain-maintenance": {
+      "why": "keeps graph index and capsule cache fresh without full rebuilds",
+      "required_steps": [
+        "check dirty nodes via daemon event log",
+        "rebuild only affected capsules",
+        "verify search index is valid",
+        "check daemon is running"
+      ],
+      "skip_conditions": ["no brain files changed"],
+      "validation_expectations": [
+        "python tools/graph_brain_lint.py passes",
+        "daemon running"
+      ],
+      "artifact_expectations": []
+    },
+    "feature-implementation-learning": {
+      "why": "saves compact reusable patterns so future similar tasks start with a fast path",
+      "required_steps": [
+        "query prior patterns: python tools/feature_pattern_query.py '<keywords>' --limit 3",
+        "load top 1-3 matching pattern cards",
+        "implement using proven shortcut when pattern confidence >= 0.65",
+        "after success: save compact pattern card to feature-implementation-patterns.md",
+        "update implementation-cache-index.md"
+      ],
+      "skip_conditions": ["docstring-only", "terminal-help", "simple Q&A", "docs-ingestion-only"],
+      "validation_expectations": ["pattern card is compact"],
+      "artifact_expectations": ["memory_candidate"]
+    }
+  },
+
+  "task_type_to_workflow": {
+    "feature_change":    "feature_change_workflow",
+    "bug_fix":           "bug_fix_workflow",
+    "debugging":         "debugging_workflow",
+    "docs_ingestion":    "docs_ingestion_workflow",
+    "docstring_only":    "docstring_only_workflow",
+    "test_creation":     "test_creation_workflow",
+    "refactor":          "refactor_workflow",
+    "graph_brain_tooling": "graph_brain_tooling_workflow",
+    "terminal_help":     "terminal_help_workflow",
+    "question":          "question_workflow",
+    "data_contract":     "data_contract_workflow",
+    "validation_only":   "validation_only_workflow"
+  },
+
+  "comment_memory_policy": "memory_policy_rules have moved to .claude/brain/memory-policy.json"
+}

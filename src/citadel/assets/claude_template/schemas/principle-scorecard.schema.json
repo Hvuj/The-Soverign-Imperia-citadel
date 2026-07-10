@@ -1,0 +1,27 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "PrincipleScorecard",
+  "type": "object",
+  "properties": {
+    "task_id": { "type": "string" },
+    "diff_hash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "companies": {
+      "type": "object",
+      "properties": {
+        "simplicity":    { "type": "number" },
+        "frugality":     { "type": "number" },
+        "structure":     { "type": "number" },
+        "dryness":       { "type": "number" },
+        "decoupling":    { "type": "number" },
+        "encapsulation": { "type": "number" },
+        "convention":    { "type": "number" },
+        "craft":         { "type": "number" }
+      },
+      "required": ["simplicity", "frugality", "structure", "dryness", "decoupling", "encapsulation", "convention", "craft"]
+    },
+    "conflicts": { "type": "array", "items": { "type": "string" } },
+    "board_decision_id": { "type": ["string", "null"] }
+  },
+  "required": ["task_id", "diff_hash", "companies", "conflicts", "board_decision_id"],
+  "additionalProperties": false
+}

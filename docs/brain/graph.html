@@ -1,0 +1,307 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>The Sovereign Imperia Citadel Z — Vigilant Intelligence and Reasoning Engine Network</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+
+  <script src="https://cdn.jsdelivr.net/npm/three@0.150.1/build/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/3d-force-graph@1.73.0/dist/3d-force-graph.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three-spritetext@1.9.1/dist/three-spritetext.min.js"></script>
+
+  <!-- Suppress browser's automatic /favicon.ico request -->
+  <link rel="icon" href="data:,">
+  <!-- Cache-busting: bump v= any time CSS/JS changes to force fresh load -->
+  <link href="graph.css?v=20260703-legionz" rel="stylesheet">
+</head>
+<body>
+
+  <!-- ============================================================
+       TOP BAR — always visible
+  ============================================================ -->
+  <header class="topbar" role="banner">
+
+    <button id="command-toggle" class="icon-btn" type="button"
+            aria-label="Toggle command panel" title="Toggle command panel">
+      <i class="bi bi-layout-sidebar-inset" aria-hidden="true"></i>
+    </button>
+
+    <div class="brand" aria-label="Citadel">
+      <div class="brand-mark" aria-hidden="true">V</div>
+      <div class="brand-text">
+        <strong>The Sovereign Imperia Citadel Z</strong>
+        <span>Vigilant Intelligence Network</span>
+      </div>
+    </div>
+
+    <div class="search-wrap">
+      <i class="bi bi-search" aria-hidden="true"></i>
+      <input id="search" type="search"
+             placeholder="Search nodes, tags, files, paths..."
+             autocomplete="off" spellcheck="false"
+             aria-label="Search graph nodes" />
+      <div id="search-results" class="search-results"
+           role="listbox" aria-label="Search results"></div>
+    </div>
+
+    <button id="health-pill" class="health-pill is-unknown" type="button"
+            aria-label="Open system health" title="Open system health">
+      <span class="health-dot" aria-hidden="true"></span>
+      <span id="health-pill-text">Health loading</span>
+    </button>
+
+    <nav class="top-actions" aria-label="Primary graph actions">
+      <button id="voice-btn" class="top-btn" type="button"
+              aria-label="Toggle voice telemetry" aria-pressed="false" title="Toggle voice">
+        <i class="bi bi-mic-mute" aria-hidden="true"></i><span>Voice Off</span>
+      </button>
+      <button id="fit-btn" class="top-btn" type="button" title="Fit visible graph">Fit</button>
+      <button id="focus-btn" class="top-btn" type="button" title="Focus selected node">Focus</button>
+      <button id="rotate-btn" class="top-btn" type="button"
+              aria-pressed="false" title="Toggle auto rotate">Rotate</button>
+      <button id="export-btn" class="top-btn" type="button" title="Export PNG">Export</button>
+      <button id="reload-btn" class="top-btn" type="button" title="Reload graph">Reload</button>
+      <button id="workspace-btn" class="top-btn" type="button"
+              title="Open Workspace Intelligence explorer">
+        <i class="bi bi-diagram-3" aria-hidden="true"></i><span>Workspace</span>
+      </button>
+      <button id="tasks-btn" class="top-btn" type="button"
+              title="Open the Task Cockpit">
+        <i class="bi bi-kanban" aria-hidden="true"></i><span>Tasks</span>
+      </button>
+      <button id="ask-citadel-btn" class="top-btn primary" type="button"
+              aria-label="Open Ask Citadel" aria-pressed="false">
+        <i class="bi bi-chat-dots" aria-hidden="true"></i><span>Ask Citadel</span>
+      </button>
+    </nav>
+
+  </header>
+
+  <!-- ============================================================
+       MAIN GRAPH SHELL — hero full-screen 3D canvas
+  ============================================================ -->
+  <main class="graph-shell" role="main" aria-label="Citadel 3D project intelligence graph">
+
+    <div id="graph3d" role="img" aria-label="Interactive 3D knowledge graph"></div>
+    <div class="graph-vignette" aria-hidden="true"></div>
+    <div id="tooltip" class="node-tooltip" role="tooltip" aria-hidden="true"></div>
+    <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true"></div>
+
+  </main>
+
+  <!-- ============================================================
+       COMMAND PANEL — left floating drawer, hidden by default
+  ============================================================ -->
+  <section id="command-panel" class="command-panel"
+           aria-hidden="true" aria-label="Graph command panel">
+
+    <div class="panel-header">
+      <div>
+        <span class="eyebrow">Command</span>
+        <h2>Graph controls</h2>
+      </div>
+      <button id="command-close" class="icon-btn" type="button"
+              aria-label="Close command panel">
+        <i class="bi bi-x-lg" aria-hidden="true"></i>
+      </button>
+    </div>
+
+    <div class="panel-body">
+
+      <div class="control-grid compact">
+        <button id="reset-btn" type="button">Reset</button>
+        <button id="fit-btn2" type="button">Fit</button>
+        <button id="focus-btn2" type="button">Focus</button>
+        <button id="clear-btn" type="button" class="danger">Clear</button>
+      </div>
+
+      <details class="control-section" open>
+        <summary>System health</summary>
+        <div id="health" class="health-card" aria-live="polite">Loading system health...</div>
+        <button id="health-reload-btn" class="wide-btn" type="button">
+          <i class="bi bi-arrow-clockwise" aria-hidden="true"></i> Reload health
+        </button>
+      </details>
+
+      <details class="control-section" open>
+        <summary>Graph stats</summary>
+        <div id="stats" class="stats-grid"></div>
+      </details>
+
+      <details class="control-section">
+        <summary>View options</summary>
+        <label class="field-row">Depth
+          <input id="depth" type="range" min="0" max="3" value="1"
+                 aria-label="Neighbor highlight depth" />
+        </label>
+        <label class="field-row">Labels
+          <select id="labels" aria-label="Node label mode">
+            <option value="important">Important only</option>
+            <option value="selected">Selected only</option>
+            <option value="all">All</option>
+            <option value="none">None</option>
+          </select>
+        </label>
+        <label class="field-row">Node size
+          <input id="size-scale" type="range" min="70" max="180" value="115"
+                 aria-label="Node size scale" />
+        </label>
+        <label class="field-row">Quality
+          <select id="perf-mode" aria-label="Rendering quality">
+            <option value="balanced" selected>Balanced</option>
+            <option value="high">High quality</option>
+            <option value="performance">Performance</option>
+          </select>
+        </label>
+      </details>
+
+      <details class="control-section">
+        <summary>Node types</summary>
+        <div class="filter-actions">
+          <button id="types-all-btn" type="button">All</button>
+          <button id="types-clear-btn" type="button">Clear</button>
+        </div>
+        <div id="legend" class="legend-chips"
+             role="group" aria-label="Node type filters"></div>
+      </details>
+
+      <details class="control-section">
+        <summary>Voice</summary>
+        <label class="field-row">Mode
+          <select id="voice-mode" aria-label="Voice mode">
+            <option value="minimal">Minimal</option>
+            <option value="calm_ai">Calm AI</option>
+            <option value="cinematic_ai" selected>Cinematic AI</option>
+            <option value="command_center">Command Center</option>
+          </select>
+        </label>
+        <label class="field-row">Engine
+          <select id="voice-engine" aria-label="Voice engine">
+            <option value="local">Local voice</option>
+            <option value="puter_ai">AI voice beta</option>
+          </select>
+        </label>
+      </details>
+
+    </div>
+  </section>
+
+  <!-- ============================================================
+       INSPECTOR PANEL — right floating drawer, hidden by default
+  ============================================================ -->
+  <section id="inspector-panel" class="inspector-panel"
+           aria-hidden="true" aria-label="Node inspector">
+
+    <div class="panel-header">
+      <div>
+        <span class="eyebrow">Inspector</span>
+        <h2>Selected node</h2>
+      </div>
+      <button id="inspector-close" class="icon-btn" type="button"
+              aria-label="Close inspector">
+        <i class="bi bi-x-lg" aria-hidden="true"></i>
+      </button>
+    </div>
+
+    <div class="panel-body">
+      <div id="details" class="details-panel" aria-live="polite">
+        <div class="empty-state">
+          <span>◎</span>
+          <p>Click any node to inspect it.</p>
+        </div>
+      </div>
+      <div class="section-title">Connections</div>
+      <div id="neighbors" class="neighbors-panel" aria-live="polite">
+        <div class="empty-state muted">
+          <span>···</span>
+          <p>No node selected.</p>
+        </div>
+      </div>
+    </div>
+
+  </section>
+
+  <!-- ============================================================
+       ASK Citadel PANEL — bottom-right floating, hidden by default
+  ============================================================ -->
+  <section id="ask-citadel-panel" class="ask-citadel-panel"
+           role="dialog" aria-modal="false"
+           aria-hidden="true" aria-labelledby="ask-title">
+
+    <div class="ask-header">
+      <div>
+        <span class="eyebrow">Local system Q&amp;A</span>
+        <h2 id="ask-title">Ask The Sovereign Imperia Citadel Z</h2>
+      </div>
+      <div class="ask-header-actions">
+        <button id="ask-clear-btn" class="icon-btn" type="button"
+                aria-label="Clear Ask Citadel conversation" title="Clear">
+          <i class="bi bi-trash3" aria-hidden="true"></i>
+        </button>
+        <button id="ask-close-btn" class="icon-btn" type="button"
+                aria-label="Close Ask Citadel" title="Close">
+          <i class="bi bi-x-lg" aria-hidden="true"></i>
+        </button>
+      </div>
+    </div>
+
+    <div class="ask-badges">
+      <span id="ask-source-badge" class="source-badge local">Local answer first</span>
+      <span id="ask-model-badge" class="source-badge muted">Local first</span>
+      <div class="ask-mode-toggle" role="group" aria-label="Answer source">
+        <button type="button" class="ask-mode-btn active" data-mode="local"
+                aria-pressed="true">Local</button>
+        <button type="button" class="ask-mode-btn" data-mode="citadel"
+                aria-pressed="false"
+                title="Send questions directly to Claude (via the claude CLI)">Citadel</button>
+      </div>
+    </div>
+
+    <div class="ask-chips" role="group" aria-label="Suggested questions">
+      <button class="ask-chip" type="button" data-q="Are all systems green?">Are all systems green?</button>
+      <button class="ask-chip" type="button" data-q="What permissions do you have?">What permissions do you have?</button>
+      <button class="ask-chip" type="button" data-q="What daemons are running?">What daemons are running?</button>
+      <button class="ask-chip" type="button" data-q="What can you access?">What can you access?</button>
+      <button class="ask-chip" type="button" data-q="What is the graph status?">What is the graph status?</button>
+    </div>
+
+    <div id="ask-history" class="ask-history"
+         role="log" aria-live="polite" aria-relevant="additions"></div>
+
+    <div id="ask-loading" class="ask-loading" hidden>
+      <span class="spinner"></span>
+      <span id="ask-loading-msg">Reading local status...</span>
+    </div>
+
+    <div class="ask-input-row">
+      <textarea id="ask-input" rows="1"
+                placeholder="Ask about system status, graph, or access..."
+                aria-label="Ask Citadel"></textarea>
+      <button id="ask-send-btn" class="send-btn" type="button"
+              aria-label="Send question">
+        <i class="bi bi-send-fill" aria-hidden="true"></i>
+      </button>
+    </div>
+
+    <div class="ask-hint">Enter to send. Shift+Enter for a new line.</div>
+
+  </section>
+
+  <!-- ============================================================
+       BOTTOM TELEMETRY STRIP
+  ============================================================ -->
+  <footer class="bottom-telemetry" role="contentinfo" aria-label="System telemetry">
+    <div><span>SYS</span><strong id="status">Loading graph...</strong></div>
+    <div><span>VIEW</span><strong id="view-status">3D ready</strong></div>
+    <div><span>NODE</span><strong id="hover-status">No node selected</strong></div>
+  </footer>
+
+  <!-- Cache-busting: bump v= together with graph.css -->
+  <script src="graph.js?v=20260703-legionz"></script>
+</body>
+</html>

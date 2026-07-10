@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "comment": "Canonical memory policy rules and domain join rules. Migrated from workflow-manifest-config.json v6. Consumed by tools/memory_scheduler.py and tools/build_execution_manifest.py.",
+
+  "memory_policy_rules": {
+    "skip_types": ["terminal_help", "question", "docstring_only", "validation_only"],
+    "default_policy": "curator_decides",
+    "durable_triggers": [
+      "feature-engineering rule",
+      "join strategy decision",
+      "routing correction",
+      "validation pattern",
+      "known failure to avoid",
+      "successful reusable workflow",
+      "domain rule"
+    ],
+    "not_durable": [
+      "one-off terminal help",
+      "simple Q&A",
+      "docstring-only edit",
+      "formatting-only change",
+      "temporary failed command unless it reveals a reusable pitfall"
+    ]
+  },
+
+  "domain_join_rules": {
+    "sample_feature_join_rule": {
+      "rule": "sample feature features are one row per date; join by date only unless upstream feature table later becomes multi-commodity or multi-symbol",
+      "applies_to": ["sample_feature_features", "sample feature feature engineering"],
+      "task_types_where_relevant": ["feature_change", "data_contract", "debugging", "refactor"]
+    }
+  }
+}

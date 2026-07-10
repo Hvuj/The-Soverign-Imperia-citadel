@@ -1,0 +1,30 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "legion-run-ledger.schema.json",
+  "title": "Legion Run Ledger Record",
+  "description": "One line of a `citadel run` ledger (.claude/state/legion-runs/<run_id>/ledger.ndjson), appended by tools/legion_run_state.append_ledger. Every record carries a float epoch `ts` and an `event` discriminator; the remaining fields depend on the event.",
+  "type": "object",
+  "required": ["ts", "event"],
+  "properties": {
+    "ts": {"type": "number", "description": "Float epoch seconds (time.time()) stamped at append."},
+    "event": {
+      "type": "string",
+      "enum": ["plan-gate", "worker-start", "worker-stop", "worker-respawn", "worker-final", "worker-usage"]
+    },
+    "worker": {"type": "string", "description": "Worker id, e.g. worker-A (absent on plan-gate)."},
+    "company": {"type": "string", "description": "Company/repo id the worker owns (worker-start)."},
+    "model": {"type": "string", "description": "Model id, e.g. claude-opus-4-8 (worker-start/worker-respawn)."},
+    "effort": {"type": "string", "description": "Effort level, e.g. low/medium/high (worker-start/worker-respawn)."},
+    "tier": {"type": "string", "description": "Scheduler tier, e.g. cheap/standard/strong-planning (worker-start/worker-respawn)."},
+    "exit_code": {"type": ["integer", "null"], "description": "Worker process exit code (worker-stop)."},
+    "decision": {"type": "string", "description": "failure_recovery decision reason (worker-stop)."},
+    "reason": {"type": "string", "description": "Human reason for respawn or plan-gate verdict."},
+    "status": {"type": "string", "enum": ["done", "blocked"], "description": "Final gate status (worker-final)."},
+    "gate": {"type": "string", "description": "Governance gate reason (worker-final)."},
+    "approved": {"type": "boolean", "description": "Plan-company approval verdict (plan-gate)."},
+    "total_tokens": {"type": "integer", "minimum": 0, "description": "Tokens the worker consumed (worker-usage)."},
+    "cost_usd": {"type": "number", "minimum": 0, "description": "Notional USD cost (worker-usage)."},
+    "is_error": {"type": "boolean", "description": "Whether the worker reported is_error (worker-usage)."},
+    "num_turns": {"type": ["integer", "null"], "description": "Worker turn count if reported (worker-usage)."}
+  }
+}

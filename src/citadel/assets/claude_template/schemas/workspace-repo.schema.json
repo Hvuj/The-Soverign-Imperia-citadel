@@ -1,0 +1,30 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "workspace-repo.schema.json",
+  "title": "WorkspaceRepo",
+  "description": "Schema for /api/workspace/repo response.",
+  "type": "object",
+  "required": ["repo_id", "repo_name", "path", "file_count", "module_count"],
+  "properties": {
+    "repo_id": { "type": "string" },
+    "repo_name": { "type": "string" },
+    "path": { "type": "string" },
+    "file_count": { "type": "integer", "minimum": 0 },
+    "module_count": { "type": "integer", "minimum": 0 },
+    "symbol_count": { "type": "integer", "minimum": 0 },
+    "test_count": { "type": "integer", "minimum": 0 },
+    "feature_count": { "type": "integer", "minimum": 0 },
+    "package_roots": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "top_directories": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "has_orchestration": { "type": "boolean" },
+    "has_schemaval": { "type": "boolean" },
+    "has_dask": { "type": "boolean" },
+    "has_pandas": { "type": "boolean" }
+  }
+}

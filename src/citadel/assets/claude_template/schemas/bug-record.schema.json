@@ -1,0 +1,25 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "BugRecord",
+  "type": "object",
+  "properties": {
+    "bug_id": { "type": "string", "pattern": "^bug_[a-f0-9]{12}$" },
+    "first_seen": { "type": "integer" },
+    "last_seen": { "type": "integer" },
+    "occurrence_count": { "type": "integer", "minimum": 1 },
+    "fingerprints": {
+      "type": "object",
+      "properties": {
+        "error_class": { "type": "string" },
+        "error_message_template": { "type": "string" },
+        "stack_signature": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "code_locus_signature": { "type": "string" },
+        "ast_pattern_hash": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+      },
+      "required": ["error_class", "error_message_template", "stack_signature", "code_locus_signature", "ast_pattern_hash"]
+    },
+    "status": { "type": "string", "enum": ["captured", "patch_testing", "codemod_promoted", "human_required"] }
+  },
+  "required": ["bug_id", "first_seen", "last_seen", "occurrence_count", "fingerprints", "status"],
+  "additionalProperties": false
+}

@@ -1,0 +1,43 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "system-health.schema.json",
+  "title": "SystemHealth",
+  "description": "Schema for Citadel system health responses (/api/health and /brain/system-status.json).",
+  "type": "object",
+  "required": ["overall_status", "summary", "checks", "created_at", "epoch_ms"],
+  "properties": {
+    "overall_status": {
+      "type": "string",
+      "enum": ["green", "yellow", "red"]
+    },
+    "summary": {
+      "type": "object",
+      "required": ["green", "yellow", "red"],
+      "properties": {
+        "green": { "type": "integer", "minimum": 0 },
+        "yellow": { "type": "integer", "minimum": 0 },
+        "red": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "checks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "status"],
+        "properties": {
+          "name": { "type": "string" },
+          "status": { "type": "string", "enum": ["green", "yellow", "red"] },
+          "details": { "type": "string" },
+          "evidence": { "type": "string" },
+          "required": { "type": "boolean" },
+          "category": { "type": "string" },
+          "message": { "type": "string" },
+          "recommended_fix": { "type": "string" }
+        }
+      }
+    },
+    "created_at": { "type": "string" },
+    "epoch_ms": { "type": "integer" },
+    "ui": { "type": "object" }
+  }
+}

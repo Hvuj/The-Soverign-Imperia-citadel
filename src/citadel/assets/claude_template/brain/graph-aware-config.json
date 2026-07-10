@@ -1,0 +1,257 @@
+{
+  "version": 7,
+  "automation_mode": "mandatory",
+  "normal_start_command": "scripts/claude-start-smart.sh",
+  "direct_claude_start_allowed": false,
+  "manual_commands_are_debug_only": true,
+  "daemon_required": true,
+  "default_depth": 2,
+  "max_context_nodes": 12,
+  "max_memory_refs": 8,
+  "max_files": 20,
+  "max_agents": 8,
+  "max_agents_by_intent": {
+    "docs_ingestion": 5,
+    "question": 5,
+    "workflow": 5,
+    "validation": 6,
+    "implementation": 8,
+    "debugging": 8
+  },
+  "max_skills": 8,
+  "_comment": "Workspace-agnostic routing scaffold. The topic/domain/unit tables below use GENERIC capability categories only; the concrete framework/domain vocabulary for a given workspace is learned over time (see framework-signals.json and the graph-aware router) and merged in per workspace. No prior-domain terms are shipped.",
+  "topic_aliases": {
+    "orchestration": [
+      "asset",
+      "job",
+      "schedule",
+      "sensor",
+      "pipeline",
+      "dag",
+      "materialization",
+      "resource",
+      "io manager",
+      "partition"
+    ],
+    "distributed-compute": [
+      "partition",
+      "shuffle",
+      "map_partitions",
+      "compute",
+      "cluster",
+      "worker"
+    ],
+    "python": [
+      "import",
+      "module",
+      "class",
+      "function",
+      "typing",
+      "package"
+    ],
+    "dataframe": [
+      "dataframe",
+      "numeric",
+      "array",
+      "series",
+      "dtype",
+      "index",
+      "vectorized"
+    ],
+    "query": [
+      "query",
+      "aggregation",
+      "cte",
+      "group by",
+      "join",
+      "table"
+    ],
+    "schema-model": [
+      "schema",
+      "config",
+      "model",
+      "validation",
+      "yaml",
+      "required field"
+    ],
+    "testing": [
+      "test",
+      "fixture",
+      "assert",
+      "scenario",
+      "coverage",
+      "bdd"
+    ],
+    "domain-logic": [
+      "rule",
+      "invariant",
+      "constraint",
+      "business logic",
+      "semantics",
+      "definition"
+    ],
+    "docs-ingestion": [
+      "docs",
+      "documentation",
+      "learn this",
+      "here are docs",
+      "ingest"
+    ],
+    "graph-brain": [
+      "graph",
+      "brain",
+      "node",
+      "edge"
+    ],
+    "cache": [
+      "cache",
+      "reuse",
+      "already solved"
+    ],
+    "scope-safety": [
+      "scope",
+      "guard",
+      "gitignore",
+      "delete"
+    ],
+    "workflow": [
+      "plan",
+      "audit",
+      "agent",
+      "subagent",
+      "effort"
+    ]
+  },
+  "depth_by_intent": {
+    "question": 1,
+    "implementation": 2,
+    "debugging": 3,
+    "validation": 2,
+    "docs_ingestion": 2,
+    "architecture": 3,
+    "workflow": 2
+  },
+  "domain_to_agents": {
+    "performance": [
+      "performance-reviewer",
+      "distributed-compute-specialist",
+      "dataframe-specialist",
+      "cache-performance-auditor"
+    ],
+    "orchestration": [
+      "orchestration-specialist",
+      "schema-model-specialist",
+      "bdd-test-specialist",
+      "data-contract-validator",
+      "test-validation-runner"
+    ],
+    "distributed-compute": [
+      "distributed-compute-specialist",
+      "dataframe-specialist",
+      "performance-reviewer"
+    ],
+    "dataframe": [
+      "dataframe-specialist",
+      "performance-reviewer"
+    ],
+    "query": [
+      "query-specialist",
+      "data-contract-validator"
+    ],
+    "schema-model": [
+      "schema-model-specialist",
+      "data-contract-validator"
+    ],
+    "testing": [
+      "bdd-test-specialist",
+      "test-validation-runner"
+    ],
+    "domain-logic": [
+      "domain-logic-validator",
+      "semantics-reviewer"
+    ],
+    "python": [
+      "python-specialist",
+      "lsp-diagnostics-agent"
+    ],
+    "graph-brain": [
+      "brain-search-router",
+      "context-capsule-builder",
+      "graph-relevance-auditor"
+    ]
+  },
+  "domain_to_skills": {
+    "python": [
+      "python-code-review"
+    ],
+    "testing": [
+      "testing-strategy-review"
+    ],
+    "graph-brain": [
+      "graph-aware-context-routing"
+    ],
+    "workflow": [
+      "cold-start-preflight"
+    ]
+  },
+  "token_budget": {
+    "bootstrap_capsule_chars": 1200,
+    "prompt_capsule_chars": 3000,
+    "agent_capsule_chars": 4000,
+    "prompt_capsule_min_score": 8.0
+  },
+  "fast_path_confidence_threshold": 0.65,
+  "cache_ttl_seconds": 300,
+  "max_capsule_chars": 2000,
+  "graph_build": {
+    "max_file_nodes": 200,
+    "max_directory_nodes": 100,
+    "max_artifact_nodes": 60,
+    "max_capsule_nodes": 40,
+    "include_runtime_artifacts": true,
+    "include_manifest_node": true,
+    "include_capsule_nodes": true,
+    "include_source_file_nodes": true
+  },
+  "unit_aliases": {
+    "performance": [
+      "vectorize", "vectorization", "optimize", "optimization", "throughput",
+      "speed", "profile", "benchmark", "bottleneck", "slow", "parallel",
+      "memory usage", "compute", "efficiency", "latency", "hot loop", "simd"
+    ],
+    "core": []
+  },
+  "unit_to_agents": {
+    "performance": [
+      "performance-reviewer",
+      "distributed-compute-specialist",
+      "dataframe-specialist",
+      "cache-performance-auditor"
+    ],
+    "core": []
+  },
+  "unit_to_skills": {
+    "performance": [],
+    "core": []
+  },
+  "agent_skip_rules": {
+    "feature-implementation-learner": {
+      "skip_when_intent": ["docs_ingestion", "question"]
+    },
+    "pattern-reuse-router": {
+      "skip_unless_explicit_topic": ["workflow", "graph-brain", "cache"]
+    },
+    "cache-manager": {
+      "skip_unless_explicit_topic": ["cache", "workflow", "graph-brain"]
+    },
+    "cache-key-guardian": {
+      "skip_unless_explicit_topic": ["cache", "workflow", "graph-brain"]
+    },
+    "implementation-cache-indexer": {
+      "skip_unless_explicit_topic": ["cache", "workflow", "graph-brain"]
+    },
+    "reuse-fast-path-agent": {
+      "skip_unless_explicit_topic": ["cache", "workflow", "graph-brain"]
+    }
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "enabled": true,
+  "vault_path_override": null,
+  "debounce_seconds": 0.5,
+  "max_file_bytes": 10485760,
+  "poll_interval_seconds": 1.0,
+  "never_call_claude": true,
+  "never_edit_production_code": true
+}
