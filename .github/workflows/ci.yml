@@ -44,9 +44,9 @@ jobs:
             $HOME/.cache/uv
             $HOME/.local/share/uv
           key: uv-${{ github.repository }}-${{ github.ref_name }}-${{ runner.os }}-${{ hashFiles('uv.lock','pyproject.toml') }}
-          restore-keys:
-            - uv-${{ github.repository }}-${{ github.ref_name }}-${{ runner.os }}-
-            - uv-${{ github.repository }}-
+          restore-keys: |
+            uv-${{ github.repository }}-${{ github.ref_name }}-${{ runner.os }}-
+            uv-${{ github.repository }}-
 
       # Step 5: Synchronize the environment from the lockfile.
       # Safe to run every time; uv only installs what's missing.
