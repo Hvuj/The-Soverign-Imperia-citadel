@@ -2,7 +2,7 @@
 
 Primary flow:
   init          Set up a workspace once (scaffold + full auto-learn)
-  up            Bring the Citadel online — boot brain + daemons + UI, launch Claude Code
+  up            Bring the Citadel online — boot brain + daemons + UI, launch the session
   down          Take the Citadel offline — stop all daemons + UI server, clean pidfiles
 
 Other subcommands:
@@ -241,10 +241,31 @@ def _run_company_scorecard(args: argparse.Namespace, ws) -> int:
     return result.returncode
 
 
+def _cmd_do(args: argparse.Namespace) -> int:
+    """Run a task The Sovereign way — free local Ollama first, escalate to the cloud only if needed."""
+    import os
+    from pathlib import Path
+
+    from citadel.services.execute import LocalConfidence, SovereignRunner
+
+    ws = Path(args.workspace).resolve() if getattr(args, "workspace", None) else Path.cwd()
+    task = " ".join(args.task).strip()
+    conf_path = ws / ".claude" / "state" / "local-confidence.jsonl"
+    model = getattr(args, "model", None) or os.environ.get("CITADEL_OLLAMA_MODEL")
+    runner = SovereignRunner(confidence=LocalConfidence(path=conf_path), model_override=model)
+    result = runner.run(task)
+    print(f"◆ The Sovereign — {result.status}")
+    if result.output:
+        print(result.output)
+    if result.status != "pass" and result.reason:
+        print(f"  ({result.reason})")
+    return 0 if result.status == "pass" else 1
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="citadel",
-        description="The Sovereign Imperia Citadel — workspace-agnostic graph-brain for Claude Code.",
+        description="The Sovereign Imperia Citadel — workspace-agnostic graph-brain orchestration for your coding sessions.",
     )
     parser.add_argument("--version", action="version", version="%(prog)s 0.1.0")
     sub = parser.add_subparsers(dest="command", required=True, metavar="COMMAND")
@@ -264,7 +285,7 @@ def _build_parser() -> argparse.ArgumentParser:
         p.add_argument("--workspace", default=None,
                        help="Workspace path (default: auto-detect the citadel-home home)")
         p.add_argument("--dry-run", action="store_true", dest="dry_run",
-                       help="Print what would be done without starting daemons or launching Claude")
+                       help="Print what would be done without starting daemons or launching the session")
         p.add_argument("--no-ui", action="store_true", dest="no_ui",
                        help="Skip starting the Citadel UI server")
         p.add_argument("--restart", action="store_true", dest="restart",
@@ -274,7 +295,7 @@ def _build_parser() -> argparse.ArgumentParser:
                             "medium, high, xhigh, ultracode). Default: auto (Citadel self-manages).")
 
     # Primary activation flow: `citadel up` / `citadel down`.
-    p_up = sub.add_parser("up", help="Bring the Citadel online — boot brain + daemons + UI, launch Claude Code")
+    p_up = sub.add_parser("up", help="Bring the Citadel online — boot brain + daemons + UI, launch the session")
     _add_up_options(p_up)
     p_up.set_defaults(func=_cmd_up)
 
@@ -369,6 +390,15 @@ def _build_parser() -> argparse.ArgumentParser:
     p_co.add_argument("--workspace", default=None, help="Workspace path (default: auto-detect)")
     p_co.add_argument("--task-id", default=None, help="Optional task ID for scorecard")
     p_co.set_defaults(func=_cmd_companies)
+
+    p_do = sub.add_parser(
+        "do",
+        help="Run a task The Sovereign way — free local Ollama first, escalate to the cloud only if needed",
+    )
+    p_do.add_argument("task", nargs="+", help="What you want done (a question, a check, a small function, ...)")
+    p_do.add_argument("--workspace", default=None, help="Workspace path (default: current directory)")
+    p_do.add_argument("--model", default=None, help="Ollama model tag for the local tier (or set CITADEL_OLLAMA_MODEL)")
+    p_do.set_defaults(func=_cmd_do)
 
     return parser
 

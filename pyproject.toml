@@ -79,6 +79,7 @@ lint = [
 ]
 test = [
   "pytest==9.1.1",
+  "pytest-xdist>=3.8.0",
 ]
 
 [tool.uv]
@@ -145,4 +146,7 @@ exclude = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
-addopts = "-ra --strict-markers -v"
+addopts = "-n auto --dist loadscope -ra --strict-markers"
+markers = [
+  "serial: run serially — parallel-unsafe (shared sockets/ports/fixed state files)",
+]

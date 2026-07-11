@@ -154,11 +154,11 @@ class RamCache:
             self._evictions += 1
 
     def _pick_victim(self) -> _Node | None:
+        """Next node to evict. SIEVE advances the hand from tail toward head, clearing visited bits;
+        it terminates because after at most one full pass every bit is 0 and an unvisited node is hit."""
         if self._policy == "lru":
             return self._tail
         node = self._hand or self._tail
-        # Terminates: each visited node clears its bit, so after at most one full tail->head
-        # pass every bit is 0 and the next unvisited node is evicted.
         while node is not None and node.visited:
             node.visited = False
             node = node.newer or self._tail

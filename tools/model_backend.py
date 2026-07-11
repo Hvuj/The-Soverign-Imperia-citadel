@@ -34,6 +34,7 @@ import threading
 from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import Enum
+from pathlib import Path
 from typing import Any
 
 
@@ -78,7 +79,7 @@ def detect_hardware() -> HardwareProfile:
     Probe OS and ML libraries to determine available hardware.
     Safe to call with no ML libraries installed — degrades gracefully.
     """
-    import importlib
+    import importlib.util
 
     cpu_count = os.cpu_count() or 1
     platform_info = f"{platform.system()} {platform.machine()} Python {sys.version.split()[0]}"
@@ -104,6 +105,12 @@ def detect_hardware() -> HardwareProfile:
                 cuda_device_name = props.name
         except Exception:
             pass
+
+    if not cuda_available:
+        smi = _probe_nvidia_smi()
+        if smi is not None:
+            cuda_available = True
+            vram_gb, cuda_device_name = smi
 
     if cuda_available and vram_gb > 12:
         device = BackendDevice.CUDA_FULL
@@ -132,38 +139,101 @@ def detect_hardware() -> HardwareProfile:
     )
 
 
-def _probe_total_ram_gb() -> float:
+def _windows_ram_bytes() -> tuple[int, int] | None:
     try:
-        import psutil  # type: ignore
-        return psutil.virtual_memory().total / (1024 ** 3)
-    except ImportError:
+        import ctypes
+
+        class MEMORYSTATUSEX(ctypes.Structure):
+            _fields_ = [
+                ("dwLength", ctypes.c_ulong),
+                ("dwMemoryLoad", ctypes.c_ulong),
+                ("ullTotalPhys", ctypes.c_ulonglong),
+                ("ullAvailPhys", ctypes.c_ulonglong),
+                ("ullTotalPageFile", ctypes.c_ulonglong),
+                ("ullAvailPageFile", ctypes.c_ulonglong),
+                ("ullTotalVirtual", ctypes.c_ulonglong),
+                ("ullAvailVirtual", ctypes.c_ulonglong),
+                ("ullAvailExtendedVirtual", ctypes.c_ulonglong),
+            ]
+
+        stat = MEMORYSTATUSEX()
+        stat.dwLength = ctypes.sizeof(stat)
+        if ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(stat)):
+            return int(stat.ullTotalPhys), int(stat.ullAvailPhys)
+    except Exception:
+        return None
+    return None
+
+
+def _system_memory_bytes() -> tuple[int, int]:
+    """(total, available) RAM in bytes: psutil -> /proc/meminfo -> Windows API -> POSIX sysconf -> (0, 0)."""
+    try:
+        import psutil
+        vm = psutil.virtual_memory()
+        return int(vm.total), int(vm.available)
+    except Exception:
         pass
     try:
+        total = avail = 0
         with open("/proc/meminfo") as f:
             for line in f:
                 if line.startswith("MemTotal:"):
-                    kb = int(line.split()[1])
-                    return kb / (1024 ** 2)
+                    total = int(line.split()[1]) * 1024
+                elif line.startswith("MemAvailable:"):
+                    avail = int(line.split()[1]) * 1024
+        if total:
+            return total, (avail or total)
     except Exception:
         pass
-    return 0.0
+    win = _windows_ram_bytes()
+    if win is not None:
+        return win
+    try:
+        page = os.sysconf("SC_PAGE_SIZE")
+        phys = os.sysconf("SC_PHYS_PAGES")
+        avail_pages = os.sysconf("SC_AVPHYS_PAGES")
+        if page > 0 and phys > 0:
+            return page * phys, page * (avail_pages if avail_pages > 0 else phys)
+    except (ValueError, OSError, AttributeError):
+        pass
+    return 0, 0
+
+
+def _probe_total_ram_gb() -> float:
+    return _system_memory_bytes()[0] / (1024 ** 3)
 
 
 def _probe_available_ram_gb() -> float:
+    return _system_memory_bytes()[1] / (1024 ** 3)
+
+
+def _probe_nvidia_smi() -> tuple[float, str] | None:
+    """Detect an NVIDIA GPU via nvidia-smi when torch is absent. Returns (vram_gb, device_name)."""
+    import shutil
+    import subprocess
+
+    exe = shutil.which("nvidia-smi")
+    if not exe:
+        return None
     try:
-        import psutil  # type: ignore
-        return psutil.virtual_memory().available / (1024 ** 3)
-    except ImportError:
-        pass
+        proc = subprocess.run(
+            [exe, "--query-gpu=memory.total,name", "--format=csv,noheader,nounits"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if proc.returncode != 0 or not proc.stdout.strip():
+        return None
+    first = proc.stdout.strip().splitlines()[0]
+    if "," not in first:
+        return None
+    mem_mib, name = first.split(",", 1)
     try:
-        with open("/proc/meminfo") as f:
-            for line in f:
-                if line.startswith("MemAvailable:"):
-                    kb = int(line.split()[1])
-                    return kb / (1024 ** 2)
-    except Exception:
-        pass
-    return 0.0
+        return float(mem_mib.strip()) / 1024.0, name.strip()
+    except ValueError:
+        return None
 
 
 @dataclass

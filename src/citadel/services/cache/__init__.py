@@ -7,7 +7,9 @@ local unix socket; CacheClient is the thin client with disk fallback. This is wh
 context carry a small ``ram_ref`` pointer instead of an inlined bulk payload.
 """
 
+from citadel.services.cache import memoize
 from citadel.services.cache.client import CacheClient, socket_path
+from citadel.services.cache.memoize import cached, cached_call
 from citadel.services.cache.ram_cache import RamCache
 
-__all__ = ["CacheClient", "RamCache", "socket_path"]
+__all__ = ["CacheClient", "RamCache", "cached", "cached_call", "memoize", "socket_path"]
