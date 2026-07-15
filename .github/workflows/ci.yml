@@ -100,35 +100,53 @@ jobs:
             echo "⚠️ WARNING: PR diff is very large ($FILE_SIZE bytes). Review will be focused and concise."
           fi
 
-                    # Create JSON payload safely using file-based approach
-                    ESCAPED_DIFF=$(cat pr_diff.txt | sed 's/\\/\\\\/g' | sed 's/"/\\"/g' | sed ':a;N;$!ba;s/\n/\\n/g')
-
-                    cat > payload.json << 'PAYLOAD_EOF'
-          {
-            "model": "gpt-5.6-sol",
-            "temperature": 0.2,
-            "max_tokens": 8000,
-            "messages": [
-              {
-                "role": "user",
-                "content": "You are a Principal Staff Software Engineer conducting code review. You are receiving a GIT DIFF of all changed lines. Note: ruff and type checking (mypy/pyright) already handle style, formatting, and type issues. Focus ONLY on: correctness, security, performance, and maintainability.\n\nCRITICAL FOR LARGE PRs (100+ files):\n1. Process file-by-file. Focus STRICTLY on '+' (additions) and '-' (deletions) lines.\n2. Skip files with only formatting/whitespace changes.\n3. If a single changed function exceeds 80-100 lines, flag as 'Maintainability' issue.\n4. Keep explanations brief (avoid exceeding GitHub's 65,536 char comment limit).\n\nREVIEW CHECKLIST (per logical block):\n- Correctness: Edge cases, null/undefined handling, race conditions, off-by-one errors.\n- Security: Injection risks, hardcoded secrets, missing auth checks, unsafe deserialization.\n- Performance: N+1 queries, unoptimized loops, unnecessary allocations, missing caching.\n- Maintainability: DRY/SOLID violations, unclear variable names, missing error handling, complex conditionals.\n\nOUTPUT FORMAT (Markdown template for EVERY issue):\n### 🚨 [SEVERITY: Critical/High/Medium/Low] - [Brief Title]\n- **File:** \`[path]\`\n- **Lines:** \`[approximate range]\`\n- **Problem:** [1 sentence: what is wrong and why it matters]\n- **Solution:** [Copy-pasteable code fix with Before/After if needed]\n\nRULES:\n- If code is excellent: reply ONLY with \"✅ LGTM. No critical issues, security risks, or performance bottlenecks found.\"\n- Be direct, professional, specific. Skip praise.\n- Do not hallucinate methods/variables from the diff.\n\nHere is the PR diff to review:\n\`\`\`diff\n"
-              }
-            ]
-          }
-          PAYLOAD_EOF
-
-                    # Append escaped diff and close JSON properly
+                    # Create JSON payload safely using Python
                     python3 << 'PYTHON_EOF'
           import json
-
-          with open('payload.json', 'r') as f:
-              payload = json.load(f)
 
           with open('pr_diff.txt', 'r') as f:
               diff_content = f.read()
 
-          # Append diff to the message content
-          payload['messages'][0]['content'] += diff_content + '\n```"'
+          payload = {
+              "model": "gpt-5.6-sol",
+              "temperature": 0.2,
+              "max_tokens": 8000,
+              "messages": [
+                  {
+                      "role": "user",
+                      "content": """You are a Principal Staff Software Engineer conducting code review. You are receiving a GIT DIFF of all changed lines. Note: ruff and type checking (mypy/pyright) already handle style, formatting, and type issues. Focus ONLY on: correctness, security, performance, and maintainability.
+
+          CRITICAL FOR LARGE PRs (100+ files):
+          1. Process file-by-file. Focus STRICTLY on '+' (additions) and '-' (deletions) lines.
+          2. Skip files with only formatting/whitespace changes.
+          3. If a single changed function exceeds 80-100 lines, flag as 'Maintainability' issue.
+          4. Keep explanations brief (avoid exceeding GitHub's 65,536 char comment limit).
+
+          REVIEW CHECKLIST (per logical block):
+          - Correctness: Edge cases, null/undefined handling, race conditions, off-by-one errors.
+          - Security: Injection risks, hardcoded secrets, missing auth checks, unsafe deserialization.
+          - Performance: N+1 queries, unoptimized loops, unnecessary allocations, missing caching.
+          - Maintainability: DRY/SOLID violations, unclear variable names, missing error handling, complex conditionals.
+
+          OUTPUT FORMAT (Markdown template for EVERY issue):
+          ### 🚨 [SEVERITY: Critical/High/Medium/Low] - [Brief Title]
+          - **File:** `[path]`
+          - **Lines:** `[approximate range]`
+          - **Problem:** [1 sentence: what is wrong and why it matters]
+          - **Solution:** [Copy-pasteable code fix with Before/After if needed]
+
+          RULES:
+          - If code is excellent: reply ONLY with "✅ LGTM. No critical issues, security risks, or performance bottlenecks found."
+          - Be direct, professional, specific. Skip praise.
+          - Do not hallucinate methods/variables from the diff.
+
+          Here is the PR diff to review:
+          ```diff
+          """ + diff_content + """
+          ```"""
+                  }
+              ]
+          }
 
           with open('payload.json', 'w') as f:
               json.dump(payload, f)
