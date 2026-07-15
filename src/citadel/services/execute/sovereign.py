@@ -7,12 +7,35 @@ the real Ollama local tier and the cloud tier.
 """
 
 import re
+import subprocess
+import sys
 from collections.abc import Callable
 from pathlib import Path
 
 from citadel.services.execute.blueprint import Blueprint, ExecutionResult
 from citadel.services.execute.executor import Executor, sovereign_run
 from citadel.services.execute.policy import LocalConfidence
+
+_GROUNDED_INTENTS = frozenset({"question", "search"})
+
+
+def default_brain_search(prompt: str, limit: int = 5) -> str:
+    """Zero-token grounding: query the local workspace brain (tools/brain_query.py). Empty on any failure,
+    so a missing index or tools dir simply means the local model answers ungrounded."""
+    tools = Path(__file__).resolve().parents[4] / "tools"
+    script = tools / "brain_query.py"
+    if not script.exists():
+        return ""
+    try:
+        proc = subprocess.run(
+            [sys.executable, str(script), prompt, "--limit", str(limit)],
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    return proc.stdout.strip() if proc.returncode == 0 else ""
 
 _INTENT_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ("architecture", re.compile(r"\b(refactor|architect|migrat|redesign|rewrite|overhaul)\w*", re.I)),
@@ -43,12 +66,14 @@ class SovereignRunner:
         confidence: LocalConfidence | None = None,
         classify: Callable[[str], str] | None = None,
         model_override: str | None = None,
+        search: Callable[[str], str] | None = None,
     ) -> None:
         self._local = local
         self._cloud = cloud
         self._confidence = confidence
         self._classify = classify or classify_intent
         self._model_override = model_override
+        self._search = search if search is not None else default_brain_search
 
     def _local_executor(self) -> Executor:
         if self._local is None:
@@ -65,8 +90,14 @@ class SovereignRunner:
 
     def run(self, prompt: str, *, context: str = "", task_id: str = "task") -> ExecutionResult:
         intent = self._classify(prompt)
+        grounded = context
+        if intent in _GROUNDED_INTENTS and self._search is not None:
+            hits = self._search(prompt)
+            if hits:
+                prefix = f"{context}\n\n" if context else ""
+                grounded = f"{prefix}Relevant context from the workspace brain:\n{hits}"
         complexity = "high" if intent in _COMPLEX_INTENTS else "low"
-        blueprint = Blueprint(task_id=task_id, instruction=prompt, context=context, assigned_tier="cheap")
+        blueprint = Blueprint(task_id=task_id, instruction=prompt, context=grounded, assigned_tier="cheap")
         return sovereign_run(
             blueprint,
             intent,

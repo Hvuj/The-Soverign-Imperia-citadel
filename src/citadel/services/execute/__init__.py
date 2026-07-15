@@ -12,6 +12,7 @@ from citadel.services.execute.arbitrator import (
 )
 from citadel.services.execute.blueprint import Blueprint, ExecutionResult
 from citadel.services.execute.cloud import CloudClaudeExecutor
+from citadel.services.execute.coding import LocalCodingExecutor, extract_code, verify_by_command
 from citadel.services.execute.executor import (
     TIER_MODEL,
     Executor,
@@ -31,6 +32,7 @@ from citadel.services.execute.local import (
 )
 from citadel.services.execute.sequencer import sequence
 from citadel.services.execute.sovereign import SovereignRunner, classify_intent
+from citadel.services.execute.verdict import VerdictLedger, artifact_hash
 
 __all__ = [
     "ArbitrationDecision",
@@ -44,6 +46,7 @@ __all__ = [
     "SovereignRunner",
     "classify_intent",
     "LlamaCppEngine",
+    "LocalCodingExecutor",
     "LocalEngine",
     "LocalExecutor",
     "NullArbitrator",
@@ -51,11 +54,15 @@ __all__ = [
     "ResourceArbitrator",
     "RunSpec",
     "TIER_MODEL",
+    "VerdictLedger",
+    "artifact_hash",
     "estimate_tokens",
+    "extract_code",
     "get_local_engine",
     "orchestrate",
     "resilient_orchestrate",
     "route",
     "sequence",
     "sovereign_run",
+    "verify_by_command",
 ]

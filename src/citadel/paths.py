@@ -15,6 +15,7 @@ Precedence for state_dir():
 
 import json
 import os
+import time
 import tomllib
 from pathlib import Path
 
@@ -28,6 +29,60 @@ class CitadelNotInitialized(RuntimeError):
             f"No Citadel workspace found for '{cwd}'.\n"
             "Run `citadel init <workspace>` first, or set CITADEL_WORKSPACE."
         )
+
+
+class CitadelBootError(RuntimeError):
+    """A dot-directory could not be created or verified (masterplan §11)."""
+
+
+def is_unsafe_placement(path: Path) -> str | None:
+    """Return why `path` is an unsafe home for Citadel state, or None if it is fine (masterplan §11.2).
+
+    Windows/WSL 9P (`/mnt/c`) and OneDrive-synced paths corrupt dot-directories (mtime lies, cloud
+    placeholders), which is the root cause of the "`.claude` is broken when clicked" bug."""
+    normalized = str(path).replace("\\", "/")
+    if normalized.startswith("/mnt/c/") or "/mnt/c/" in normalized:
+        return "under /mnt/c (WSL 9P boundary — mtime lies and placeholders break dot-dirs)"
+    if any(part.lower().startswith("onedrive") for part in path.parts):
+        return "under a OneDrive-synced path (cloud placeholders corrupt dot-dirs)"
+    return None
+
+
+def ensure_dot_dir(path: str | Path, *, strict: bool = False) -> Path:
+    """Create a dot-directory correctly (masterplan §11.3). The only sanctioned dot-dir creator.
+
+    - Quarantines a *file* squatting on the directory's name to `<name>.broken.<ts>` (never destroyed).
+    - Verifies the result is a real, writable directory via a probe round-trip.
+    - `strict=True` refuses unsafe placement (/mnt/c, OneDrive); default warns via `is_unsafe_placement`
+      so an existing OneDrive workspace still works while `citadel doctor` surfaces the risk.
+    """
+    raw = Path(path).expanduser()
+    if strict:
+        unsafe = is_unsafe_placement(raw)
+        if unsafe:
+            raise CitadelBootError(f"{raw} is unsafe: {unsafe} (masterplan §11.2)")
+    resolved = raw.resolve()
+    if resolved.exists() and not resolved.is_dir():
+        quarantine = resolved.with_name(f"{resolved.name}.broken.{int(time.time())}")
+        resolved.rename(quarantine)
+    try:
+        resolved.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        raise CitadelBootError(f"could not create {resolved}: {exc}") from exc
+    if not resolved.is_dir():
+        raise CitadelBootError(f"{resolved} exists but is not a directory after mkdir")
+    probe = resolved / ".citadel-probe"
+    try:
+        probe.write_text("ok", encoding="utf-8")
+        ok = probe.read_text(encoding="utf-8") == "ok"
+    except OSError as exc:
+        raise CitadelBootError(f"{resolved} failed write/read round-trip: {exc}") from exc
+    finally:
+        if probe.exists():
+            probe.unlink()
+    if not ok:
+        raise CitadelBootError(f"{resolved} failed write/read round-trip")
+    return resolved
 
 
 def _find_config_toml(start: Path) -> Path | None:

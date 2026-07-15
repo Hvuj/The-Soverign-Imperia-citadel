@@ -18,42 +18,71 @@ The core is pure stdlib. Everything is rooted at your workspace, never the insta
 
 ## Install
 
+You install one thing — **citadel** — and `citadel setup` auto-installs everything else.
+
 ```bash
-# Global CLI (like pipx) — install once, use on any repo
+# 1. Install the CLI (like pipx) — once, works on any repo
 git clone <repo-url> sovereign-imperia-citadel && cd sovereign-imperia-citadel
 uv tool install .            # exposes `citadel` on your PATH
 
-# Scaffold citadel into any project — from anywhere
+# 2. Auto-install the rest: Ollama, a local model, and the Python extras
+citadel setup                # then `citadel doctor` to verify readiness
+
+# 3. Scaffold The Sovereign into any project
 citadel init ~/code/my-project --branch main
 ```
 
-> **Developing sovereign-imperia-citadel itself?** Run commands with `uv run citadel …` from the repo —
-> that uses the editable install, so `src/` and `tools/` changes are live (no reinstall).
-> After changing citadel's own code, `uv tool install . --force` refreshes the **global** CLI
-> and the baked `.claude` template used by future `citadel init`.
+> **Developing citadel itself?** Run commands with `uv run citadel …` from the repo (editable install, so
+> `src/`/`tools/` changes are live). After changing citadel's own code, `uv tool install . --force` refreshes
+> the global CLI and the baked `.claude` template used by future `citadel init`.
+
+### Prerequisites
+
+**`citadel setup` auto-installs these for you:**
+
+| Auto-installed | How |
+|---|---|
+| **Ollama** (local, free inference) | winget (Windows) / official script (macOS/Linux) |
+| A local **code** model (`qwen2.5-coder:7b`, ~4.7 GB, ~5 GB VRAM) | `ollama pull` — powers free verified coding; override with `citadel setup --model <tag>` on smaller GPUs |
+| Python extras (anthropic, watchdog, PyYAML, psutil, matplotlib, pytest-xdist) | pip |
+| `llama-cpp-python` (opt-in: `citadel setup --with-ml`) | pip — needs a compiler or prebuilt wheel |
+
+**You provide these yourself (true prerequisites):**
+
+| Prerequisite | Why |
+|---|---|
+| **Python ≥ 3.12** + **uv** | to install and run citadel |
+| The **coding-session CLI** on your PATH | the cloud tier The Sovereign escalates to as a last resort |
+| **NVIDIA driver + CUDA** (optional) | GPU-accelerated local inference; the CPU path works without it |
+
+Run **`citadel doctor`** any time to see what is installed, what is missing, and how to fix it.
 
 ## Quick start
 
 ```bash
+citadel setup                                  # auto-install Ollama + model + extras (once)
 citadel init ~/code/my-project --branch main   # auto-learn: index, git-mine, bootstrap memory
 cd ~/code/my-project
-citadel up                            # boot the brain + daemons, launch Claude Code
-citadel down                                 # stop everything when done
+citadel up                                     # boot the brain + daemons, launch the session
+citadel do "what does the auth module do?"     # answered FREE on the local tier — zero cloud tokens
+citadel down                                   # stop everything when done
 ```
 
 ## Commands
 
 | Command | Description |
 |---|---|
+| `citadel setup [--model M] [--with-ml]` | **Auto-install** Ollama + a local model + Python extras — so you only install citadel |
+| `citadel doctor` | Report what is installed / missing / how to fix (Ollama, model, GPU, extras) |
+| `citadel do "<task>"` | Run a task **The Sovereign way**: free local Ollama first, escalate to the cloud only if needed |
 | `citadel init <workspace> [--branch BRANCH]` | Full auto-learn: scaffold, index, git-mine, bootstrap memory |
-| `citadel up [--restart] [--no-ui] [--dry-run]` | Bring up the full brain and launch Claude Code |
+| `citadel up [--restart] [--no-ui] [--dry-run]` | Bring up the full brain and launch the session |
 | `citadel down [--workspace PATH]` | Stop all Citadel daemons + UI server and clean pidfiles |
 | `citadel index [--workspace PATH]` | Rebuild workspace intelligence indexes |
 | `citadel mine [--workspace PATH] [--branch BRANCH]` | Mine git history of all companies × dev/main/master |
 | `citadel brain [--workspace PATH]` | Rebuild brain search index |
 | `citadel replicate "<task>" [--execute --targets @f.json]` | Decide/execute **zero-token** feature replication |
 | `citadel companies [--list \| <file>]` | List discovered companies, or run the KISS/SOLID/YAGNI/DRY scorecard on a file |
-| `python tools/legion_compile.py --all [--stats]` | Compile source into the `__legion__` cache (see below) |
 
 ## What happens when activated
 

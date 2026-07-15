@@ -65,6 +65,7 @@ def _cmd_legion_run(args: argparse.Namespace) -> int:
         dashboard=not getattr(args, "no_dashboard", False),
         mode=getattr(args, "mode", "task"),
         permission_mode=getattr(args, "permission_mode", None),
+        local_first=getattr(args, "local_first", False),
     )
 
 
@@ -242,24 +243,67 @@ def _run_company_scorecard(args: argparse.Namespace, ws) -> int:
 
 
 def _cmd_do(args: argparse.Namespace) -> int:
-    """Run a task The Sovereign way — free local Ollama first, escalate to the cloud only if needed."""
+    """Run a task The Sovereign way — free local Ollama first, escalate to the cloud only if needed.
+
+    With `--file`, The Sovereign edits that file locally, verifies the change in a sandbox (via `--verify`,
+    or a Python syntax check for .py), and only writes it back — and only calls it done — when it verifies.
+    """
     import os
+    import shlex
+    import sys
     from pathlib import Path
 
     from citadel.services.execute import LocalConfidence, SovereignRunner
 
     ws = Path(args.workspace).resolve() if getattr(args, "workspace", None) else Path.cwd()
     task = " ".join(args.task).strip()
-    conf_path = ws / ".claude" / "state" / "local-confidence.jsonl"
     model = getattr(args, "model", None) or os.environ.get("CITADEL_OLLAMA_MODEL")
-    runner = SovereignRunner(confidence=LocalConfidence(path=conf_path), model_override=model)
-    result = runner.run(task)
+    confidence = LocalConfidence(path=ws / ".claude" / "state" / "local-confidence.jsonl")
+    targets = getattr(args, "file", None)
+
+    if targets:
+        from citadel.services.execute import (
+            Blueprint,
+            CloudClaudeExecutor,
+            LocalCodingExecutor,
+            OllamaEngine,
+            sovereign_run,
+            verify_by_command,
+        )
+        py_targets = [t for t in targets if t.endswith(".py")]
+        if getattr(args, "verify", None):
+            verify = verify_by_command(shlex.split(args.verify))
+        elif py_targets:
+            check = "import ast;" + "".join(f"ast.parse(open({t!r}).read());" for t in py_targets)
+            verify = verify_by_command([sys.executable, "-c", check])
+        else:
+            verify = None
+        local = LocalCodingExecutor(
+            OllamaEngine(), ws, verify=verify or (lambda _sb: (True, "no verifier")), model=model or "",
+        )
+        blueprint = Blueprint(task_id="do", instruction=task, allowed_files=list(targets), assigned_tier="cheap")
+        result = sovereign_run(
+            blueprint, "simple_function", local=local, cloud=CloudClaudeExecutor(), confidence=confidence,
+        )
+    else:
+        result = SovereignRunner(confidence=confidence, model_override=model).run(task)
+
     print(f"◆ The Sovereign — {result.status}")
     if result.output:
         print(result.output)
     if result.status != "pass" and result.reason:
         print(f"  ({result.reason})")
     return 0 if result.status == "pass" else 1
+
+
+def _cmd_setup(args: argparse.Namespace) -> int:
+    from citadel.commands.setup import run_setup
+    return run_setup(args)
+
+
+def _cmd_doctor(args: argparse.Namespace) -> int:
+    from citadel.commands.setup import run_doctor
+    return run_doctor(args)
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -343,6 +387,10 @@ def _build_parser() -> argparse.ArgumentParser:
         "--permission-mode", default=None, dest="permission_mode",
         help="Override worker permission mode (default: dontAsk; bypassPermissions with --autonomous)",
     )
+    p_run.add_argument(
+        "--local-first", action="store_true", dest="local_first",
+        help="Try each slice free on the local tier first; record attempts (needs a verifier to drop cloud workers)",
+    )
     p_run.set_defaults(func=_cmd_legion_run)
 
 
@@ -398,7 +446,25 @@ def _build_parser() -> argparse.ArgumentParser:
     p_do.add_argument("task", nargs="+", help="What you want done (a question, a check, a small function, ...)")
     p_do.add_argument("--workspace", default=None, help="Workspace path (default: current directory)")
     p_do.add_argument("--model", default=None, help="Ollama model tag for the local tier (or set CITADEL_OLLAMA_MODEL)")
+    p_do.add_argument("--file", action="append", default=None,
+                      help="Edit this file locally, verified in a sandbox before write-back (repeatable)")
+    p_do.add_argument("--verify", default=None, help="Shell command that must exit 0 to accept the local change")
     p_do.set_defaults(func=_cmd_do)
+
+    p_setup = sub.add_parser(
+        "setup",
+        help="Auto-install everything The Sovereign needs (Ollama + local model + Python extras)",
+    )
+    p_setup.add_argument("--model", default=None, help="Local model to pull (default: qwen2.5-coder:7b)")
+    p_setup.add_argument("--with-ml", action="store_true", dest="with_ml",
+                         help="Also best-effort install llama-cpp-python (needs a compiler/wheel)")
+    p_setup.set_defaults(func=_cmd_setup)
+
+    p_doctor = sub.add_parser("doctor", help="Report what is installed / missing / how to fix")
+    p_doctor.add_argument("--model", default=None, help="Local model to check for (default: qwen2.5-coder:7b)")
+    p_doctor.add_argument("--workspace", default=None, help="Workspace to check placement for (default: cwd)")
+    p_doctor.add_argument("--repair", action="store_true", help="Quarantine a squatting .claude file + verify the dir")
+    p_doctor.set_defaults(func=_cmd_doctor)
 
     return parser
 

@@ -1,0 +1,32 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell($env:PYTHONPATH='src'; python -m pytest -q -p no:cacheprovider --continue-on-collection-errors 2>&1 | Select-Object -Last 8)",
+      "PowerShell($env:PYTHONPATH='src'; python -m pytest -q -p no:cacheprovider --continue-on-collection-errors 2>&1 | Select-Object -Last 4)",
+      "PowerShell($env:PYTHONPATH='src'; python -m pytest tests/test_sovereign.py -q -p no:cacheprovider -o addopts=\"-ra\" 2>&1 | Select-Object -Last 10)",
+      "PowerShell($env:PYTHONPATH='src'; python -m pytest tests/test_legion_local_first.py tests/test_sovereign.py tests/test_cli.py -q -p no:cacheprovider -o addopts=\"-ra\" 2>&1 | Select-Object -Last 12)",
+      "PowerShell($env:PYTHONPATH='src'; python -m pytest -q -p no:cacheprovider --continue-on-collection-errors 2>&1 | Select-Object -Last 6)",
+      "PowerShell($env:PYTHONPATH='src'; python -m pytest tests/test_coding.py tests/test_ollama_live.py -q -p no:cacheprovider -o addopts=\"-ra\" 2>&1 | Select-Object -Last 14)",
+      "PowerShell($env:PYTHONPATH='src'; python -m pytest -q -p no:cacheprovider --continue-on-collection-errors 2>&1 | Select-Object -Last 5)",
+      "PowerShell($env:PYTHONPATH='src'; python -m pytest tests/test_dot_dir_contract.py -q -p no:cacheprovider -o addopts=\"-ra\" 2>&1 | Select-Object -Last 14)",
+      "PowerShell($env:PYTHONPATH='src'; python -c \"import sys; sys.path.insert\\(0,'tools'\\); import term_lint; v=term_lint.scan\\(\\); print\\('violations:', len\\(v\\)\\); [print\\('  ',f,l\\) for f,l,t in v[:20]]\")",
+      "PowerShell($env:PYTHONPATH='src'; python -m pytest tests/test_citadel_oracle.py -q -p no:cacheprovider -o addopts=\"-ra\" 2>&1 | Select-Object -Last 8)",
+      "PowerShell($env:PYTHONPATH='src'; $env:PYTHONIOENCODING='utf-8'; $out = python tools/best_practices_lint.py --json 2>&1 | Out-String; \"oracle flagged?:\"; \\($out -split \"`n\" | Select-String -Pattern 'citadel_oracle'\\); \"\\(empty=clean\\)\")",
+      "PowerShell($env:PYTHONPATH='src'; python -m pytest tests/test_citadel_custos.py -q -p no:cacheprovider -o addopts=\"-ra\" 2>&1 | Select-Object -Last 8)",
+      "PowerShell($env:PYTHONPATH='src'; $env:PYTHONIOENCODING='utf-8'; $out = python tools/best_practices_lint.py --json 2>&1 | Out-String; \"custos flagged?:\"; \\($out -split \"`n\" | Select-String -Pattern 'citadel_custos'\\); \"\\(empty=clean\\)\")",
+      "PowerShell($env:PYTHONPATH='src'; python -m pytest tests/test_verdict.py tests/test_coding.py -q -p no:cacheprovider -o addopts=\"-ra\" 2>&1 | Select-Object -Last 8)",
+      "PowerShell($env:PYTHONPATH='src'; python -m pytest tests/test_authority.py -q -p no:cacheprovider -o addopts=\"-ra\" 2>&1 | Select-Object -Last 10)",
+      "PowerShell($env:PYTHONPATH='src'; python -m pytest tests/test_law.py tests/test_authority.py -q -p no:cacheprovider --continue-on-collection-errors)",
+      "PowerShell($env:PYTHONPATH='src'; python -m pytest -q -p no:cacheprovider --continue-on-collection-errors -n auto --dist loadscope)",
+      "Read(//c/Users/Hvuj/.claude/projects/c--Users-Hvuj-OneDrive-Desktop-VIREN/memory/**)",
+      "PowerShell($env:PYTHONPATH='src'; python -m pytest tests/test_trust.py -q -p no:cacheprovider --continue-on-collection-errors)",
+      "PowerShell($env:PYTHONPATH='src'; python tools/term_lint.py; python -m pytest tests/test_term_lint.py tests/test_trust.py -q -p no:cacheprovider --continue-on-collection-errors)",
+      "PowerShell($env:PYTHONPATH='src'; python -m pytest tests/test_empire.py -q -p no:cacheprovider --continue-on-collection-errors)",
+      "PowerShell($env:PYTHONPATH='src'; python tools/term_lint.py)",
+      "PowerShell($env:PYTHONPATH='src'; python tools/term_lint.py; python -m pytest -q -p no:cacheprovider --continue-on-collection-errors -n auto --dist loadscope)"
+    ],
+    "additionalDirectories": [
+      "c:\\Users\\Hvuj\\.claude\\projects\\c--Users-Hvuj-OneDrive-Desktop-VIREN\\memory"
+    ]
+  }
+}

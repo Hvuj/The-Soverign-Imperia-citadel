@@ -110,3 +110,33 @@ The Citadel carries no framework-specific vocabulary. Two layers of discovery, a
   so this categorization is currently **inert** — it stays empty until a learning step is built to
   populate it. This is deliberate (no tech-specific rules are baked in) but means the fine-grained
   categorization is a planned capability, not a working one.
+
+## The Sovereign — voice, and local-first free execution
+
+The system speaks to you as **The Sovereign**; the model underneath is invisible plumbing. When it
+answers, it never names the engine.
+
+Execution is **local-first and free**. `citadel do "<task>"` classifies the request and routes it:
+questions, search, simple functions, and checks run on the **local Ollama tier (CPU/RAM/GPU) at zero
+tokens**; only genuinely complex or high-risk work escalates to the cloud (Sonnet) as a last resort. Each
+outcome is recorded to a per-intent **confidence** (`LocalConfidence`) — a repeatedly-failing intent
+escalates, a recovering one returns to free — so the local tier takes on more over time. The moving parts
+live in `src/citadel/services/execute/` (`policy.py`, `sovereign.py`, `local/`), all behind the same
+`Executor` seam.
+
+GPU use is automatic: hardware detection (`tools/model_backend.py` → `detect_hardware`, with an
+`nvidia-smi` fallback) picks the tier and offload; the HRA budgets VRAM before dispatch.
+
+## Setup, doctor, and the VSCode extension
+
+- **`citadel setup`** auto-installs Ollama, a small local model, and the Python extras — you only install
+  citadel. **`citadel doctor`** reports what is installed / missing / how to fix (Ollama, model, GPU,
+  extras, the escalation CLI).
+- **VSCode:** opening a `citadel init`'d workspace makes the coding extension auto-load the Citadel context
+  — the root `CLAUDE.md` and `.claude/settings.json` (hooks + statusline) are read automatically. Run
+  `citadel up` in an integrated terminal to boot the daemons for the session.
+
+## Running the tests
+
+`uv run pytest` runs the full suite in parallel (`-n auto`) in ~30s; live/hardware tests auto-skip when
+absent. See `tests/README.md` for the map of what each area covers.
