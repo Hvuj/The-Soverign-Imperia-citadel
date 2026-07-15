@@ -100,10 +100,10 @@ jobs:
             echo "⚠️ WARNING: PR diff is very large ($FILE_SIZE bytes). Review will be focused and concise."
           fi
 
-          echo "Preparing AI review payload..."
+                    # Create JSON payload safely using file-based approach
+                    ESCAPED_DIFF=$(cat pr_diff.txt | sed 's/\\/\\\\/g' | sed 's/"/\\"/g' | sed ':a;N;$!ba;s/\n/\\n/g')
 
-          # Create JSON payload safely using file-based approach
-          cat > payload.json << 'EOF'
+                    cat > payload.json << 'PAYLOAD_EOF'
           {
             "model": "gpt-5.6-sol",
             "temperature": 0.2,
@@ -115,19 +115,24 @@ jobs:
               }
             ]
           }
-          EOF
+          PAYLOAD_EOF
 
-          # Safely append the diff to the JSON payload
-          # Escape backslashes and quotes, convert newlines to \n, then close JSON
-          cat pr_diff.txt | sed 's/\\/\\\\/g' | sed 's/"/\\"/g' | sed ':a;N;$!ba;s/\n/\\n/g' >> payload.json
+                    # Append escaped diff and close JSON properly
+                    python3 << 'PYTHON_EOF'
+          import json
 
-          # Close the JSON
-          cat >> payload.json << 'EOF'
-\`\`\`"
-              }
-            ]
-          }
-          EOF
+          with open('payload.json', 'r') as f:
+              payload = json.load(f)
+
+          with open('pr_diff.txt', 'r') as f:
+              diff_content = f.read()
+
+          # Append diff to the message content
+          payload['messages'][0]['content'] += diff_content + '\n```"'
+
+          with open('payload.json', 'w') as f:
+              json.dump(payload, f)
+          PYTHON_EOF
 
           echo "Calling OpenAI API with gpt-5.6-sol..."
           REVIEW_RESPONSE=$(curl -s https://api.openai.com/v1/chat/completions \
