@@ -67,42 +67,87 @@ jobs:
   code_review_job:
     runs-on: ubuntu-latest
     name: ChatGPT Code Review
+    if: github.event.pull_request.draft == false
     steps:
-      - name: GenAI Code Review
-        uses: cirolini/genai-code-review@v2
-        with:
-          openai_api_key: ${{ secrets.openai_api_key }}
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          github_pr_id: ${{ github.event.number }}
-          openai_model: "gpt-5.6-sol"
-          openai_temperature: 0.3
-          openai_max_tokens: 128000
-          mode: files
-          language: en
-          custom_prompt: |
-            You are a Principal Staff Software Engineer conducting a rigorous code review. 
-            You are receiving the FULL content of modified files, which may be very large. 
-            
-            CRITICAL PROTOCOL FOR LARGE FILES & MODULES:
-            1. DO NOT summarize the entire file or write a high-level overview. 
-            2. Apply a "Modular, Block-Isolated" review strategy: Evaluate the file function-by-function, class-by-class, or logical-block-by-logical-block.
-            3. Ignore unchanged boilerplate, standard imports, and formatting. Focus your attention strictly on complex logic, state mutations, security boundaries, and error handling.
-            4. If any single function or module exceeds 80-100 lines, flag it as a "Maintainability" issue and explicitly recommend splitting it into smaller, single-purpose functions.
-            
-            REVIEW CHECKLIST (Apply to each logical block):
-            - Correctness: Edge cases, null/undefined handling, race conditions, off-by-one errors.
-            - Security: Injection risks, hardcoded secrets, missing authorization checks, unsafe deserialization.
-            - Performance: N+1 query patterns, unoptimized nested loops, unnecessary memory allocations, missing caching.
-            - Maintainability: Violation of DRY/SOLID principles, confusing variable names, missing error handling, overly complex conditionals.
+      - name: Checkout Repository Code
+        uses: actions/checkout@v4
 
-            OUTPUT FORMAT (Strictly follow this Markdown template for EVERY issue found):
-            ### 🚨 [SEVERITY: Critical/High/Medium/Low] - [Brief Issue Title]
-            - **File:** `[exact_file_path.ext]`
-            - **Lines:** `[approximate start-end lines of the problematic block]`
-            - **Problem:** [1-2 sentences explaining exactly what is wrong and why it matters]
-            - **Solution:** [Provide the exact, copy-pasteable code fix. Show "Before" and "After" if necessary]
+      - name: Run GenAI Code Review
+        env:
+          OPENAI_API_KEY: ${{ secrets.openai_api_key }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          #!/bin/bash
+          set -e
 
-            RULES:
-            - If the code is excellent and requires no changes, reply with ONLY: "✅ LGTM. No critical issues, security risks, or performance bottlenecks found in the reviewed modules."
-            - Do not praise the code. Be direct, professional, and highly specific.
-            - Do not hallucinate methods, variables, or dependencies that do not exist in the provided file.
+          # Get PR diff
+          PR_DIFF=$(gh pr diff $PR_NUMBER)
+
+          if [ -z "$PR_DIFF" ]; then
+            echo "No changes in PR"
+            exit 0
+          fi
+
+          # Prepare the review prompt
+          REVIEW_PROMPT="You are a Principal Staff Software Engineer conducting a rigorous code review. 
+          You are receiving the FULL content of modified files, which may be very large. 
+          
+          CRITICAL PROTOCOL FOR LARGE FILES & MODULES:
+          1. DO NOT summarize the entire file or write a high-level overview. 
+          2. Apply a \"Modular, Block-Isolated\" review strategy: Evaluate the file function-by-function, class-by-class, or logical-block-by-logical-block.
+          3. Ignore unchanged boilerplate, standard imports, and formatting. Focus your attention strictly on complex logic, state mutations, security boundaries, and error handling.
+          4. If any single function or module exceeds 80-100 lines, flag it as a \"Maintainability\" issue and explicitly recommend splitting it into smaller, single-purpose functions.
+          
+          REVIEW CHECKLIST (Apply to each logical block):
+          - Correctness: Edge cases, null/undefined handling, race conditions, off-by-one errors.
+          - Security: Injection risks, hardcoded secrets, missing authorization checks, unsafe deserialization.
+          - Performance: N+1 query patterns, unoptimized nested loops, unnecessary memory allocations, missing caching.
+          - Maintainability: Violation of DRY/SOLID principles, confusing variable names, missing error handling, overly complex conditionals.
+          
+          OUTPUT FORMAT (Strictly follow this Markdown template for EVERY issue found):
+          ### 🚨 [SEVERITY: Critical/High/Medium/Low] - [Brief Issue Title]
+          - **File:** \\\`[exact_file_path.ext]\\\`
+          - **Lines:** \\\`[approximate start-end lines of the problematic block]\\\`
+          - **Problem:** [1-2 sentences explaining exactly what is wrong and why it matters]
+          - **Solution:** [Provide the exact, copy-pasteable code fix. Show \"Before\" and \"After\" if necessary]
+          
+          RULES:
+          - If the code is excellent and requires no changes, reply with ONLY: \"✅ LGTM. No critical issues, security risks, or performance bottlenecks found in the reviewed modules.\"
+          - Do not praise the code. Be direct, professional, and highly specific.
+          - Do not hallucinate methods, variables, or dependencies that do not exist in the provided file.
+          
+          Here is the PR diff to review:
+          \\\`\\\`\\\`
+          $PR_DIFF
+          \\\`\\\`\\\`"
+
+          # Call OpenAI API
+          REVIEW_RESPONSE=$(curl -s https://api.openai.com/v1/chat/completions \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $OPENAI_API_KEY" \
+            -d @- <<EOF
+          {
+            "model": "gpt-5.6-sol",
+            "temperature": 0.3,
+            "max_tokens": 128000,
+            "messages": [
+              {
+                "role": "user",
+                "content": "$REVIEW_PROMPT"
+              }
+            ]
+          }
+          EOF
+          )
+
+          # Extract the review from the response
+          REVIEW=$(echo "$REVIEW_RESPONSE" | jq -r '.choices[0].message.content')
+
+          # Post the review as a PR comment
+          gh pr comment $PR_NUMBER --body "## 🤖 GenAI Code Review
+
+          $REVIEW"
+
+          echo "Code review posted successfully"
