@@ -74,9 +74,9 @@ jobs:
           openai_api_key: ${{ secrets.openai_api_key }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
           github_pr_id: ${{ github.event.number }}
-          openai_model: "gpt-4o"
+          openai_model: "gpt-5.6-sol"
           openai_temperature: 0.3
-          openai_max_tokens: 4096
+          openai_max_tokens: 128000
           mode: files
           language: en
           custom_prompt: ""
