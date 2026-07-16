@@ -1,0 +1,33 @@
+# Zero-Token Sovereign — MCP backing services + the egress-isolation networks (Phase Z2b).
+# MCP servers themselves are stdio, launched per-session by the client/Gateway (see mcp-servers.json).
+# This compose defines the two networks that enforce the read-in / data-out-blocked model, plus an
+# optional containerized Redis Stack for hosts that don't already run one natively.
+
+networks:
+  # No internet route at all. Our server + code-touching reference servers attach here (or use --network none).
+  citadel_internal:
+    internal: true
+  # Has an internet route — ONLY Fetch/Context7 attach here, and only to the allowlist (enforce with the
+  # proxy below or a host firewall rule). Everything else is dropped.
+  citadel_egress:
+    driver: bridge
+
+services:
+  # Optional: a containerized Redis Stack (RediSearch HNSW). Skip if you already run Redis natively.
+  redis:
+    image: redis/redis-stack:latest  # PIN by @sha256 digest in production (D6)
+    ports:
+      - "6379:6379"
+    networks:
+      - citadel_internal
+    restart: unless-stopped
+
+  # Optional egress allowlist proxy: Fetch/Context7 route through this; it permits only allowlisted hosts.
+  # (tinyproxy config not shipped here — see README; without it, restrict egress at the host firewall.)
+  egress-proxy:
+    image: monokal/tinyproxy:latest  # PIN by @sha256 digest; configure ALLOW/Filter for the allowlist
+    profiles: ["egress-proxy"]
+    networks:
+      - citadel_egress
+    environment:
+      - ALLOWED_NETWORKS=docs.python.org github.com pypi.org raw.githubusercontent.com

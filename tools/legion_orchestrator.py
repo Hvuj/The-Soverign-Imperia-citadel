@@ -383,6 +383,39 @@ def _print_plan(run_id: str, specs: list[WorkerSpec], plan_verdict: "legion_gove
     print("[legion] dashboard: python tools/worker_status.py --watch --legion --run-id " + run_id)
 
 
+def local_first_prepass(specs, run_id, ws, *, verify=None, local=None, confidence=None):
+    """Attempt each worker slice on the FREE local tier (Ollama) before any cloud spawn.
+
+    Returns the specs that still need the cloud legion. A slice is only DROPPED (resolved for free) when
+    ``verify(spec, result)`` confirms it — the raw local ``pass`` means "text was generated", NOT "the
+    work is correct", so without a verifier nothing is dropped and the cloud legion runs unchanged. Every
+    local attempt is recorded to the ledger and to the per-slice confidence, so the local tier still learns.
+    """
+    from citadel.services.execute import Blueprint, LocalConfidence, LocalExecutor, OllamaEngine
+
+    if local is None:
+        model = os.environ.get("CITADEL_OLLAMA_MODEL")
+        local = LocalExecutor(engine=OllamaEngine(), model_override=model)
+    if confidence is None:
+        confidence = LocalConfidence(path=ws / ".claude" / "state" / "local-confidence.jsonl")
+    remaining = []
+    for spec in specs:
+        blueprint = Blueprint(task_id=spec.worker_id, instruction=spec.prompt, assigned_tier="cheap")
+        result = local.execute(blueprint)
+        confidence.record("legion_slice", "local", result.status)
+        resolved = result.status == "pass" and verify is not None and verify(spec, result)
+        append_ledger(run_id, {
+            "event": "worker-local-pass" if resolved else "worker-local-attempt",
+            "worker": spec.worker_id, "company": spec.company_id,
+            "status": result.status, "free": True, "resolved": bool(resolved),
+        })
+        if resolved:
+            print(f"[legion] {spec.worker_id} ({spec.company_id}) resolved FREE on the local tier.")
+        else:
+            remaining.append(spec)
+    return remaining
+
+
 def run(
     task: str,
     *,
@@ -396,6 +429,7 @@ def run(
     dashboard: bool = True,
     mode: str = MODE_TASK,
     permission_mode: str | None = None,
+    local_first: bool = False,
 ) -> int:
     if mode not in LEGION_MODES:
         print(f"ERROR: unknown --mode {mode!r} (choose from {', '.join(LEGION_MODES)})", file=sys.stderr)
@@ -436,6 +470,12 @@ def run(
     if not plan_verdict.approved:
         print(f"[legion] plan company rejected this run: {plan_verdict.reason}", file=sys.stderr)
         return 1
+
+    if local_first:
+        specs = local_first_prepass(specs, run_id, ws)
+        if not specs:
+            print("[legion] all slices resolved on the free local tier — no cloud workers needed.")
+            return 0
 
     if dry_run:
         _print_plan(run_id, specs, plan_verdict)

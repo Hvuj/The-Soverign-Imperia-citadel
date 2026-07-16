@@ -46,7 +46,15 @@ DAEMON_PIDFILES: dict[str, str] = {
     "ram_cache_daemon": ".claude/state/ram-cache-daemon.pid",
     "bug_record_daemon": ".claude/state/bug-record-daemon.pid",
     "zombie_worker_daemon": ".claude/state/zombie-worker-daemon.pid",
+    "embedder_daemon": ".claude/state/embedder-daemon.pid",
     "citadel_ui_server": ".claude/state/citadel-ui-server.pid",
+}
+
+# Learning Z-workers publish a small live stats file each cycle; the roster reads them (never blocks).
+Z_WORKER_STATS: dict[str, str] = {
+    "embedder": ".claude/state/retrieval/embedder-stats.json",
+    "retriever": ".claude/state/retrieval/retriever-stats.json",
+    "optimizer": ".claude/state/retrieval/optimizer-stats.json",
 }
 
 MINING_DAEMONS = frozenset({"git_history_daemon", "outcome_miner_daemon", "zombie_worker_daemon"})
@@ -111,6 +119,20 @@ def active_subagents(ws: Path) -> list[dict]:
     return list(open_agents.values())
 
 
+def z_workers(ws: Path) -> list[dict]:
+    """The learning Z-workers' latest published stats (embedder chunks, retriever hit-rate, …)."""
+    out = []
+    for name, rel in Z_WORKER_STATS.items():
+        path = ws / rel
+        if not path.exists():
+            continue
+        try:
+            out.append(json.loads(path.read_text(encoding="utf-8")))
+        except (OSError, ValueError):
+            continue
+    return out
+
+
 def build_status(ws: Path | None = None) -> dict:
     ws = ws or workspace_root()
     daemons = daemon_status(ws)
@@ -121,7 +143,23 @@ def build_status(ws: Path | None = None) -> dict:
         "daemons_mining": sum(1 for d in daemons if d["alive"] and d["mining"]),
         "active_subagents": len(agents),
         "subagents": agents,
+        "z_workers": z_workers(ws),
     }
+
+
+def _render_z_worker(z: dict) -> str:
+    kind = z.get("worker")
+    if kind == "embedder":
+        live = "alive" if z.get("online") else "idle"
+        return (f"  ◆ embedder   [{live}] {z.get('chunks', 0)} chunks · "
+                f"{z.get('embedded_total', 0)} embedded · {z.get('model', '?')} ({z.get('backend', '?')})")
+    if kind == "retriever":
+        return (f"  ◆ retriever  [learning] hit-rate {z.get('hit_rate', 0.0)} · "
+                f"threshold {z.get('threshold', 0.5)} · {z.get('queries', 0)} queries")
+    if kind == "optimizer":
+        return (f"  ◆ optimizer  [working] {z.get('applied', 0)} applied · "
+                f"{z.get('rejected', 0)} rejected · {z.get('tokens_saved', 0)} tokens saved")
+    return f"  ◆ {kind or 'z-worker'}"
 
 
 def render_text(status: dict) -> str:
@@ -133,6 +171,11 @@ def render_text(status: dict) -> str:
     lines.append("")
     lines.append(f"daemons:   {status['daemons_alive']}/{len(status['daemons'])} alive, "
                  f"{status['daemons_mining']} mining")
+    zws = status.get("z_workers", [])
+    if zws:
+        lines.append("z-workers:")
+        for z in zws:
+            lines.append(_render_z_worker(z))
     lines.append(f"subagents: {status['active_subagents']} active")
     for a in status["subagents"][:10]:
         lines.append(f"  ▸ {a.get('agent', 'unknown')} (tier={a.get('tier') or '-'})")

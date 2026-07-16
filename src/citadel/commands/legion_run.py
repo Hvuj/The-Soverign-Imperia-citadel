@@ -22,6 +22,7 @@ def run(
     dashboard: bool = True,
     mode: str = "task",
     permission_mode: str | None = None,
+    local_first: bool = False,
 ) -> int:
     orchestrator = import_tool("legion_orchestrator")
     return orchestrator.run(
@@ -36,4 +37,5 @@ def run(
         dashboard=dashboard,
         mode=mode,
         permission_mode=permission_mode,
+        local_first=local_first,
     )

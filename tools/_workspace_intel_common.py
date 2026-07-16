@@ -608,17 +608,35 @@ def build_reuse_tags(file_meta: dict) -> list[str]:
     return sorted(tags)
 
 
+def _available_ram_gb() -> float | None:
+    """Available system RAM in GB via psutil, or None when psutil is absent."""
+    try:
+        import psutil
+    except ImportError:
+        return None
+    try:
+        return psutil.virtual_memory().available / (1024 ** 3)
+    except Exception:
+        return None
+
+
 def resolve_workers(cfg: dict) -> int:
     """Resolve parallel_workers from config to an int clamped to [1, 8].
 
-    'auto' â†’ os.cpu_count() clamped to [2, 8].
-    Any other value is coerced to int and clamped to [1, 8].
-    Falls back to 1 (sequential) on any error.
+    'auto' -> os.cpu_count() clamped to [2, 8], then throttled by available RAM (worker_ram_gb
+    per worker, default 0.5) when psutil is present so a low-memory host does not thrash. Without
+    psutil the RAM step is skipped and behavior is CPU-only. Any explicit value is coerced to int
+    and clamped to [1, 8]. Falls back to 1 (sequential) on any error.
     """
     raw = cfg.get("parallel_workers", 1)
     if raw == "auto":
         cores = os.cpu_count() or 1
-        return max(2, min(cores, 8))
+        workers = max(2, min(cores, 8))
+        avail = _available_ram_gb()
+        if avail is not None:
+            per_worker = cfg.get("worker_ram_gb", 0.5) or 0.5
+            workers = min(workers, max(1, int(avail // per_worker)))
+        return max(1, workers)
     try:
         return max(1, min(int(raw), 8))
     except (TypeError, ValueError):

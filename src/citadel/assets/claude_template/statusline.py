@@ -92,7 +92,7 @@ def legion_mix(state):
 d=stdin_json(); ws=d.get("workspace",{}) if isinstance(d,dict) else {}
 project=Path(os.environ.get("CLAUDE_PROJECT_DIR") or ws.get("project_dir") or ws.get("current_dir") or ".").resolve()
 state=project/".claude/state"
-model=(d.get("model",{}) or {}).get("display_name") or (d.get("model",{}) or {}).get("name") or "Claude"
+model=(d.get("model",{}) or {}).get("display_name") or (d.get("model",{}) or {}).get("name") or "The Sovereign"
 ctx=(d.get("context_window",{}) or {}).get("used_percentage") or 0
 ctxs=f"{ctx:.0f}%" if isinstance(ctx,(int,float)) else "?%"
 cost=(d.get("cost",{}) or {}).get("total_cost_usd") or 0
@@ -115,7 +115,7 @@ cache="hit" if (state/"current-task.json").exists() else "miss"
 ui_port=os.environ.get("Citadel_UI_PORT","8765")
 ui_url=f"http://localhost:{ui_port}/brain/graph.html"
 ui_dot=color('92','●') if pid_alive(state/"citadel-ui-server.pid") else color('90','○')
-line1=f"{color('36','◆ The Sovereign Imperia Citadel Z')} {color('97','▸')} {color('96',model)} {color('90','│')} {color('92','◈')} ctx {bar(ctx)} {ctxs}"
+line1=f"{color('36','◆ The Sovereign Imperia Citadel')} {color('97','▸')} {color('96',model)} {color('90','│')} {color('92','◈')} ctx {bar(ctx)} {ctxs}"
 git_stat=color('93','●') if has_changes else color('92','●')
 line2=f"{color('35','⬢')} {git_stat} {color('97',branch)} {color('90','│')} {color('91',f'±{staged_cnt}' if staged_cnt else '✓')} {color('93',f'~{modified_cnt}' if modified_cnt else '✓')}"
 mining_tag=color('93',f' ⛏{daemons_mining}') if daemons_mining else ''

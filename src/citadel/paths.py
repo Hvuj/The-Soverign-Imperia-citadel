@@ -15,6 +15,7 @@ Precedence for state_dir():
 
 import json
 import os
+import time
 import tomllib
 from pathlib import Path
 
@@ -28,6 +29,60 @@ class CitadelNotInitialized(RuntimeError):
             f"No Citadel workspace found for '{cwd}'.\n"
             "Run `citadel init <workspace>` first, or set CITADEL_WORKSPACE."
         )
+
+
+class CitadelBootError(RuntimeError):
+    """A dot-directory could not be created or verified (masterplan §11)."""
+
+
+def is_unsafe_placement(path: Path) -> str | None:
+    """Return why `path` is an unsafe home for Citadel state, or None if it is fine (masterplan §11.2).
+
+    Windows/WSL 9P (`/mnt/c`) and OneDrive-synced paths corrupt dot-directories (mtime lies, cloud
+    placeholders), which is the root cause of the "`.claude` is broken when clicked" bug."""
+    normalized = str(path).replace("\\", "/")
+    if normalized.startswith("/mnt/c/") or "/mnt/c/" in normalized:
+        return "under /mnt/c (WSL 9P boundary — mtime lies and placeholders break dot-dirs)"
+    if any(part.lower().startswith("onedrive") for part in path.parts):
+        return "under a OneDrive-synced path (cloud placeholders corrupt dot-dirs)"
+    return None
+
+
+def ensure_dot_dir(path: str | Path, *, strict: bool = False) -> Path:
+    """Create a dot-directory correctly (masterplan §11.3). The only sanctioned dot-dir creator.
+
+    - Quarantines a *file* squatting on the directory's name to `<name>.broken.<ts>` (never destroyed).
+    - Verifies the result is a real, writable directory via a probe round-trip.
+    - `strict=True` refuses unsafe placement (/mnt/c, OneDrive); default warns via `is_unsafe_placement`
+      so an existing OneDrive workspace still works while `citadel doctor` surfaces the risk.
+    """
+    raw = Path(path).expanduser()
+    if strict:
+        unsafe = is_unsafe_placement(raw)
+        if unsafe:
+            raise CitadelBootError(f"{raw} is unsafe: {unsafe} (masterplan §11.2)")
+    resolved = raw.resolve()
+    if resolved.exists() and not resolved.is_dir():
+        quarantine = resolved.with_name(f"{resolved.name}.broken.{int(time.time())}")
+        resolved.rename(quarantine)
+    try:
+        resolved.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        raise CitadelBootError(f"could not create {resolved}: {exc}") from exc
+    if not resolved.is_dir():
+        raise CitadelBootError(f"{resolved} exists but is not a directory after mkdir")
+    probe = resolved / ".citadel-probe"
+    try:
+        probe.write_text("ok", encoding="utf-8")
+        ok = probe.read_text(encoding="utf-8") == "ok"
+    except OSError as exc:
+        raise CitadelBootError(f"{resolved} failed write/read round-trip: {exc}") from exc
+    finally:
+        if probe.exists():
+            probe.unlink()
+    if not ok:
+        raise CitadelBootError(f"{resolved} failed write/read round-trip")
+    return resolved
 
 
 def _find_config_toml(start: Path) -> Path | None:
@@ -268,6 +323,52 @@ def workspace_config(ws: Path | None = None) -> dict:
         "repo_exclude_globs": exclude_globs,
         "branches": branches,
     }
+
+
+_DEFAULT_REDIS_URL = "redis://127.0.0.1:6379"
+
+
+def resolve_redis_url(ws: Path | None = None, *, explicit: str | None = None) -> str | None:
+    """Resolve the Redis connection URL, or None to force the pure-Python fallback.
+
+    Precedence: explicit arg > CITADEL_REDIS_URL env > .citadel/config.toml [redis] > default localhost.
+    `[redis] enabled = false` returns None on purpose (opt out of Redis). Never raises — a missing workspace
+    or unparsable config falls through to the env/default, so the retrieval layer always has an answer.
+    """
+    if explicit:
+        return explicit
+    env = os.environ.get("CITADEL_REDIS_URL")
+    if env:
+        return env
+    try:
+        cfg = _load_config_toml(ws)
+    except Exception:
+        cfg = {}
+    redis_cfg = cfg.get("redis", {}) if isinstance(cfg, dict) else {}
+    if redis_cfg.get("enabled") is False:
+        return None
+    url = redis_cfg.get("url")
+    return url if url else _DEFAULT_REDIS_URL
+
+
+def set_redis_config(ws: Path | None = None, *, url: str | None = None, enabled: bool = True) -> Path:
+    """Write the `[redis]` section of .citadel/config.toml, preserving every other section (targeted text
+    edit — no TOML re-serialization, so existing config is never mangled). Returns the config path."""
+    import re
+
+    root = ws or workspace_root()
+    cfg_path = root / ".citadel" / "config.toml"
+    cfg_path.parent.mkdir(parents=True, exist_ok=True)
+    text = cfg_path.read_text(encoding="utf-8") if cfg_path.exists() else ""
+    block = "[redis]\nenabled = false\n" if enabled is False else (
+        "[redis]\nenabled = true\n" + (f'url = "{url}"\n' if url else "")
+    )
+    section = re.compile(r"(?ms)^\[redis\][ \t]*\n(?:(?!^\[).*\n?)*")
+    text = section.sub(block, text) if section.search(text) else (
+        (text.rstrip() + "\n\n" if text.strip() else "") + block
+    )
+    cfg_path.write_text(text, encoding="utf-8")
+    return cfg_path
 
 
 def state_dir(ws: Path | None = None) -> Path:

@@ -1,0 +1,45 @@
+{
+  "_comment": "Zero-Token Sovereign MCP topology (Phase Z2b). Merge the entries you want into your project .mcp.json or the Docker MCP Gateway. EGRESS MODEL: reads in, data-out blocked. Servers that touch your CODE run with --network none (your code physically cannot leave); only Fetch/Context7 get the internet, restricted to an allowlist; the exec-sandbox is --network none. Pin every third-party image by @sha256 digest (replace PIN_ME) before use.",
+  "mcpServers": {
+    "citadel-retrieval": {
+      "_role": "OUR trusted zero-token retrieval server. Runs natively (reaches host Ollama + Redis directly); never_call_claude, read-only. No container needed — it only talks to localhost.",
+      "command": "python",
+      "args": ["-m", "citadel.mcp.server"],
+      "env": { "PYTHONPATH": "src", "CITADEL_WORKSPACE": "${workspaceFolder}", "CITADEL_REDIS_URL": "redis://127.0.0.1:6379" }
+    },
+    "filesystem": {
+      "_role": "Reference server, touches your code → NO EGRESS. Read-only bind mount.",
+      "command": "docker",
+      "args": ["run", "-i", "--rm", "--network", "none",
+               "--mount", "type=bind,src=${workspaceFolder},dst=/workspace,ro",
+               "mcp/filesystem@sha256:PIN_ME", "/workspace"]
+    },
+    "git": {
+      "_role": "Reference server, reads your repo → NO EGRESS.",
+      "command": "docker",
+      "args": ["run", "-i", "--rm", "--network", "none",
+               "--mount", "type=bind,src=${workspaceFolder},dst=/workspace,ro",
+               "mcp/git@sha256:PIN_ME"]
+    },
+    "memory": {
+      "_role": "Reference knowledge-graph memory → NO EGRESS (local KG only).",
+      "command": "docker",
+      "args": ["run", "-i", "--rm", "--network", "none", "mcp/memory@sha256:PIN_ME"]
+    },
+    "sequential-thinking": {
+      "_role": "Reference reasoning server → NO EGRESS.",
+      "command": "docker",
+      "args": ["run", "-i", "--rm", "--network", "none", "mcp/sequentialthinking@sha256:PIN_ME"]
+    },
+    "fetch": {
+      "_role": "The ONLY server that needs the internet. Runs on the egress-allowlist network; everything not on the allowlist is dropped. Read-only (GET).",
+      "command": "docker",
+      "args": ["run", "-i", "--rm", "--network", "citadel_egress", "mcp/fetch@sha256:PIN_ME"],
+      "_egress_allowlist": ["docs.python.org", "github.com", "pypi.org", "raw.githubusercontent.com"]
+    }
+  },
+  "_exec_sandbox": {
+    "_role": "Where Z4/Z5 run+verify code. Always --network none, ephemeral (--rm), no host mounts beyond a scoped worktree. A prompt-injected reverse shell has nowhere to go.",
+    "run": "docker run -i --rm --network none --mount type=bind,src=<scoped-worktree>,dst=/work <exec-sandbox-image@sha256:PIN_ME>"
+  }
+}

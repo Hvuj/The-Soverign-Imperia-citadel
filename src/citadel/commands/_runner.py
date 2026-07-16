@@ -109,6 +109,24 @@ def _pid_is_our_daemon(pid: int, tool_name: str) -> bool:
         return True
 
 
+def _low_priority_spawn_kwargs() -> dict:
+    """Popen kwargs that start a daemon below normal priority (Windows only here)."""
+    if sys.platform == "win32":
+        flags = getattr(subprocess, "BELOW_NORMAL_PRIORITY_CLASS", 0)
+        if flags:
+            return {"creationflags": flags}
+    return {}
+
+
+def _lower_priority(pid: int) -> None:
+    """Nice a spawned daemon down on POSIX so background work never starves the foreground."""
+    if sys.platform != "win32" and hasattr(os, "setpriority"):
+        try:
+            os.setpriority(os.PRIO_PROCESS, pid, 10)
+        except (OSError, PermissionError):
+            pass
+
+
 def start_daemon(
     tool_name: str,
     ws: Path,
@@ -158,8 +176,10 @@ def start_daemon(
                 stdout=fout,
                 stderr=ferr,
                 start_new_session=True,
+                **_low_priority_spawn_kwargs(),
             )
         pidfile.write_text(str(proc.pid))
+        _lower_priority(proc.pid)
         return proc.pid
     except FileNotFoundError:
         print(f"  [warn] could not start {tool_name}: python interpreter not found", file=sys.stderr)

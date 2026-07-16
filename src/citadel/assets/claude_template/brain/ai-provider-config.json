@@ -38,7 +38,25 @@
       "allow_qna": true,
       "allow_execution": false,
       "allow_review": false
+    },
+    "ollama": {
+      "enabled": true,
+      "mode": "local_http",
+      "host": "http://localhost:11434",
+      "priority": 0,
+      "allow_planning": false,
+      "allow_qna": true,
+      "allow_execution": true,
+      "allow_review": false,
+      "default_model": "qwen2.5:0.5b",
+      "zero_token": true
     }
+  },
+  "execution_policy": {
+    "local_first": true,
+    "local_engine": "ollama",
+    "escalate_to": "claude_code",
+    "free_intents": ["question", "search", "simple_function", "check", "docstring_only", "validation_only"]
   },
   "default_modes": {
     "ask_fallback": "local_plus_claude_code",

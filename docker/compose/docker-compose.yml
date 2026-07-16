@@ -1,0 +1,97 @@
+# The Zero-Token Sovereign — one-command stack (Phase: onboarding).
+#
+#   docker compose -f docker/compose/docker-compose.yml up -d
+#
+# Brings up Redis Stack (RediSearch/HNSW) + our MCP retrieval server over Streamable HTTP. The user installs
+# ONE thing (Docker); this stands up the rest. Reference MCP servers (filesystem/git/fetch/…) are launched
+# per-session by the client via `docker run --network none` (see ../mcp/mcp-servers.json) and attach to the
+# `citadel_egress` network defined here when they need the internet. Pin every image by @sha256 in prod
+# (run ./pin-images.sh). A no-Docker native fallback exists — see the repo README.
+
+networks:
+  # Stable external-facing name so `docker run --network citadel_egress` (Fetch) can find it.
+  citadel_egress:
+    name: citadel_egress
+    driver: bridge
+
+services:
+  # LOCAL Redis Stack — only started in local mode: `docker compose --profile local-redis up -d`.
+  # For CLOUD Redis, omit this profile and set CITADEL_REDIS_URL=rediss://user:pass@host:port in .env.
+  redis:
+    image: redis/redis-stack:latest   # PIN by @sha256 digest in production (D6)
+    container_name: citadel-redis
+    profiles: ["local-redis"]
+    ports:
+      - "${CITADEL_REDIS_PORT:-6379}:6379"
+    volumes:
+      - citadel-redis-data:/data
+    restart: unless-stopped
+
+  citadel-mcp:
+    build:
+      context: ../..
+      dockerfile: docker/mcp/Dockerfile
+    image: citadel-mcp:local
+    container_name: citadel-mcp
+    command: ["--transport", "streamable-http", "--host", "0.0.0.0", "--port", "8848"]
+    environment:
+      CITADEL_MCP_TRANSPORT: streamable-http
+      CITADEL_WORKSPACE: /workspace
+      # Local mode → the `redis` service; cloud mode → set CITADEL_REDIS_URL=rediss://… in .env.
+      CITADEL_REDIS_URL: ${CITADEL_REDIS_URL:-redis://redis:6379}
+      # Reach the host's native Ollama (GPU) from inside the container.
+      CITADEL_OLLAMA_HOST: http://host.docker.internal:11434
+      CITADEL_EMBED_MODEL: ${CITADEL_EMBED_MODEL:-nomic-embed-text}
+    ports:
+      - "${CITADEL_MCP_PORT:-8848}:8848"
+    volumes:
+      # Workspace mounted READ-ONLY — the server serves the index; vectors live in Redis.
+      - "${CITADEL_WORKSPACE_HOST:-../..}:/workspace:ro"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
+  # Opt-in containerized Ollama with ALL GPUs: `docker compose --profile ollama-gpu up -d`.
+  # Default is the host's native Ollama (simplest, keeps the GPU on the host). Use this on Linux/multi-GPU
+  # hosts that want Ollama in the stack. OLLAMA_SCHED_SPREAD spreads one model across every GPU.
+  ollama:
+    image: ollama/ollama:latest       # PIN by @sha256 in production
+    container_name: citadel-ollama
+    profiles: ["ollama-gpu"]
+    environment:
+      OLLAMA_SCHED_SPREAD: "1"         # use every GPU to the fullest for a single model
+      OLLAMA_KEEP_ALIVE: "30m"
+    ports:
+      - "11434:11434"
+    volumes:
+      - citadel-ollama-models:/root/.ollama
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all               # every GPU
+              capabilities: ["gpu"]
+    restart: unless-stopped
+
+  # Opt-in edge: `docker compose --profile edge up`. Terminates HTTP/2 + HTTP/3 (QUIC) and reverse-proxies to
+  # the uvicorn MCP server — the standard, zero-app-change way to add h2/h3/TLS for LAN/remote access.
+  # Not needed for localhost (plain HTTP/1.1 keep-alive is fine there).
+  caddy:
+    image: caddy:2
+    container_name: citadel-caddy
+    profiles: ["edge"]
+    ports:
+      - "8443:8443"        # HTTP/2 over TLS
+      - "8443:8443/udp"    # HTTP/3 (QUIC)
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - citadel-caddy-data:/data
+    depends_on:
+      - citadel-mcp
+    restart: unless-stopped
+
+volumes:
+  citadel-redis-data:
+  citadel-caddy-data:
+  citadel-ollama-models:

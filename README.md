@@ -18,42 +18,107 @@ The core is pure stdlib. Everything is rooted at your workspace, never the insta
 
 ## Install
 
+You install one thing — **citadel** — and `citadel setup` auto-installs everything else.
+
 ```bash
-# Global CLI (like pipx) — install once, use on any repo
+# 1. Install the CLI (like pipx) — once, works on any repo
 git clone <repo-url> sovereign-imperia-citadel && cd sovereign-imperia-citadel
 uv tool install .            # exposes `citadel` on your PATH
 
-# Scaffold citadel into any project — from anywhere
+# 2. Auto-install the rest: Ollama, a local model, and the Python extras
+citadel setup                # then `citadel doctor` to verify readiness
+
+# 3. Scaffold The Sovereign into any project
 citadel init ~/code/my-project --branch main
 ```
 
-> **Developing sovereign-imperia-citadel itself?** Run commands with `uv run citadel …` from the repo —
-> that uses the editable install, so `src/` and `tools/` changes are live (no reinstall).
-> After changing citadel's own code, `uv tool install . --force` refreshes the **global** CLI
-> and the baked `.claude` template used by future `citadel init`.
+> **Developing citadel itself?** Run commands with `uv run citadel …` from the repo (editable install, so
+> `src/`/`tools/` changes are live). After changing citadel's own code, `uv tool install . --force` refreshes
+> the global CLI and the baked `.claude` template used by future `citadel init`.
+
+### Prerequisites
+
+**`citadel setup` auto-installs these for you:**
+
+| Auto-installed | How |
+|---|---|
+| **Ollama** (local, free inference) | winget (Windows) / official script (macOS/Linux) |
+| A local **code** model (`qwen2.5-coder:7b`, ~4.7 GB, ~5 GB VRAM) | `ollama pull` — powers free verified coding; override with `citadel setup --model <tag>` on smaller GPUs |
+| Python extras (anthropic, watchdog, PyYAML, psutil, matplotlib, pytest-xdist) | pip |
+| Zero-Token retrieval + MCP (`redis`, `numpy`, `mcp`) | pip — powers dense search + the MCP bridge (optional; degrades to a pure-Python store) |
+| `llama-cpp-python` (opt-in: `citadel setup --with-ml`) | pip — needs a compiler or prebuilt wheel |
+
+**You provide these yourself (true prerequisites):**
+
+| Prerequisite | Why |
+|---|---|
+| **Python ≥ 3.12** + **uv** | to install and run citadel |
+| The **coding-session CLI** on your PATH | the cloud tier The Sovereign escalates to as a last resort |
+| **NVIDIA driver + CUDA** (optional) | GPU-accelerated local inference; the CPU path works without it |
+
+Run **`citadel doctor`** any time to see what is installed, what is missing, and how to fix it.
+
+### The Zero-Token stack (Redis + MCP) — one command
+
+The Zero-Token layer makes **read / search / answer cost 0 model tokens for any AI** (dense retrieval +
+an MCP bridge). It works with **no extra setup** out of the box — the vector store falls back to a
+pure-Python on-disk index and the MCP servers run as local stdio processes. For scale and native HNSW
+vectors, stand up the full stack with **one prerequisite (Docker)**:
+
+```bash
+# Brings up Redis Stack (RediSearch/HNSW) + our MCP retrieval server over HTTP
+docker compose -f docker/compose/docker-compose.yml up -d
+
+# Point the workspace at it + write the compose-flavoured .mcp.json
+citadel setup --mcp compose
+citadel doctor            # verify: redis reachable, RediSearch, MCP servers registered
+```
+
+**Redis is configurable** — precedence is `--redis-url` > `CITADEL_REDIS_URL` env >
+`.citadel/config.toml [redis]` > default `redis://127.0.0.1:6379`:
+
+```bash
+citadel setup --redis-url redis://my-redis-host:6379   # use your own Redis (writes .citadel/config.toml)
+citadel setup --no-redis                               # opt out → pure-Python on-disk vector store
+```
+
+**No Docker?** Skip the compose step entirely: `citadel setup --mcp native` (the default) runs the MCP
+servers as stdio subprocesses and the retrieval layer uses the on-disk store — still zero-token. See
+[docker/mcp/README.md](docker/mcp/README.md) for the egress-isolation model (reads in, data-out blocked)
+and digest-pinning of the open-source reference servers.
+
+**Redis local vs cloud, and every cache layer:** see [docs/REDIS-AND-CACHING.md](docs/REDIS-AND-CACHING.md).
+Bring MCP up over Docker with `citadel mcp up` (then `citadel mcp pin` / `citadel mcp status`).
 
 ## Quick start
 
 ```bash
+citadel setup                                  # auto-install Ollama + model + extras (once)
 citadel init ~/code/my-project --branch main   # auto-learn: index, git-mine, bootstrap memory
 cd ~/code/my-project
-citadel up                            # boot the brain + daemons, launch Claude Code
-citadel down                                 # stop everything when done
+citadel up                                     # boot the brain + daemons, launch the session
+citadel do "what does the auth module do?"     # answered FREE on the local tier — zero cloud tokens
+citadel down                                   # stop everything when done
 ```
 
 ## Commands
 
 | Command | Description |
 |---|---|
+| `citadel setup [--model M] [--with-ml] [--redis-url URL] [--no-redis] [--mcp native\|compose]` | **Auto-install** Ollama + model + Python extras; configure Redis + write the `.mcp.json` flavour |
+| `citadel doctor` | Report what is installed / missing / how to fix (Ollama, model, GPU, **Redis + RediSearch, MCP servers**) |
+| `citadel do "<task>"` | Run a task **The Sovereign way**: free local Ollama first, escalate to the cloud only if needed |
+| `citadel ask "<question>"` | Answer grounded in the local index with citations — retrieval + answer cost **0 model tokens** |
+| `citadel optimize <file> [--apply]` | Optimize a file locally, **verified before trust** (your code is propose-only unless `--apply`) |
+| `citadel army "<goal>"` | Decompose a goal into atomic tasks and run them on a concurrent, lease-governed local pool |
 | `citadel init <workspace> [--branch BRANCH]` | Full auto-learn: scaffold, index, git-mine, bootstrap memory |
-| `citadel up [--restart] [--no-ui] [--dry-run]` | Bring up the full brain and launch Claude Code |
+| `citadel up [--restart] [--no-ui] [--dry-run]` | Bring up the full brain and launch the session |
 | `citadel down [--workspace PATH]` | Stop all Citadel daemons + UI server and clean pidfiles |
 | `citadel index [--workspace PATH]` | Rebuild workspace intelligence indexes |
 | `citadel mine [--workspace PATH] [--branch BRANCH]` | Mine git history of all companies × dev/main/master |
 | `citadel brain [--workspace PATH]` | Rebuild brain search index |
 | `citadel replicate "<task>" [--execute --targets @f.json]` | Decide/execute **zero-token** feature replication |
 | `citadel companies [--list \| <file>]` | List discovered companies, or run the KISS/SOLID/YAGNI/DRY scorecard on a file |
-| `python tools/legion_compile.py --all [--stats]` | Compile source into the `__legion__` cache (see below) |
 
 ## What happens when activated
 

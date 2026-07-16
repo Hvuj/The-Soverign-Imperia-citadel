@@ -3,6 +3,13 @@
     "sovereign-imperia-citadel": {
       "command": "python3",
       "args": ["tools/citadel_mcp_server.py"]
+    },
+    "citadel-retrieval": {
+      "command": "python",
+      "args": ["-m", "citadel.mcp.server"],
+      "env": {
+        "PYTHONPATH": "src"
+      }
     }
   }
 }

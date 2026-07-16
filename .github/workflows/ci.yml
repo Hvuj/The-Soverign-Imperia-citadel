@@ -2,55 +2,202 @@ name: Continuous Integration
 
 on:
   push:
-    branches: [ main, master ]
+    branches:
+      - "**"
   pull_request:
-    branches: [ main, master ]
+    branches:
+      - "**"
+    types: [opened, synchronize]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'PR number to review (leave empty for current branch)'
+        required: false
+        type: string
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
 
     steps:
-      # Step 1: Clone the repository code
+      # Step 1: Checkout repository
       - name: Checkout Repository Code
         uses: actions/checkout@v4
 
-      # Step 2: Provision uv 
+      # Step 2: Install uv
       - name: Set up uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v8.3.2
         with:
-          enable-cache: false 
+          enable-cache: false
 
-      # Step 3: Explicitly cache the virtual environment directories
+      # Step 3: Install the project's Python version
+      - name: Set Up Python
+        run: uv python install
+
+      # Step 4: Cache the virtual environment and uv package cache
       - name: Cache Virtual Environment and uv Store
         id: cache-venv
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             .venv
-            ~/.cache/uv
-            ~/.local/share/uv
-          key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
+            $HOME/.cache/uv
+            $HOME/.local/share/uv
+          key: uv-${{ github.repository }}-${{ github.ref_name }}-${{ runner.os }}-${{ hashFiles('uv.lock','pyproject.toml') }}
           restore-keys: |
-            uv-${{ runner.os }}-
+            uv-${{ github.repository }}-${{ github.ref_name }}-${{ runner.os }}-
+            uv-${{ github.repository }}-
 
-      # Step 4: Provision Python runtime
-      - name: Set up Python
-        run: uv python install
-
-      # Step 5: Install dependencies (Strict replication of the user's pushed environment)
-      # Rebuilds the venv ONLY on a cache miss, relying entirely on the frozen lockfile.
+      # Step 5: Synchronize the environment from the lockfile.
+      # Safe to run every time; uv only installs what's missing.
       - name: Install Dependencies from Lockfile
-        if: steps.cache-venv.outputs.cache-hit != 'true'
         run: uv sync --frozen
 
-      # Step 6: Verify pyproject.toml matches uv.lock
-      # This step fails the CI if the user changed pyproject.toml but forgot to run 'uv lock' locally.
+      # Step 6: Ensure pyproject.toml and uv.lock are in sync
       - name: Check if Lockfile is Out of Date
         run: |
           echo "Verifying that pyproject.toml matches the committed uv.lock file..."
           uv lock --check
 
-      # Step 7: Run tests inside the strictly replicated workspace
+      # Step 7: Run the test suite
       - name: Run Test Suite
         run: uv run --frozen pytest tests/
+
+  code_review_job:
+    runs-on: ubuntu-latest
+    name: ChatGPT Code Review
+    if: github.event_name == 'workflow_dispatch' && github.event.pull_request.draft == false
+    permissions:
+      pull-requests: write
+      contents: read
+    steps:
+      - name: Checkout Repository Code
+        uses: actions/checkout@v4
+
+      - name: Determine PR Number
+        id: pr_number
+        run: |
+          if [ -n "${{ github.event.inputs.pr_number }}" ]; then
+            echo "pr_num=${{ github.event.inputs.pr_number }}" >> $GITHUB_OUTPUT
+          else
+            echo "pr_num=${{ github.event.number }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Run GenAI Code Review
+        env:
+          OPENAI_API_KEY: ${{ secrets.openai_api_key }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ steps.pr_number.outputs.pr_num }}
+          REPO: ${{ github.repository }}
+        run: |
+          #!/bin/bash
+          set -e
+
+          echo "Fetching PR diff..."
+          gh pr diff $PR_NUMBER > pr_diff.txt
+
+          # Check if diff is empty
+          if [ ! -s pr_diff.txt ]; then
+            echo "No changes in PR"
+            exit 0
+          fi
+
+          # Warn if diff is massive (> 150KB)
+          FILE_SIZE=$(wc -c < pr_diff.txt)
+          if [ "$FILE_SIZE" -gt 150000 ]; then
+            echo "⚠️ WARNING: PR diff is very large ($FILE_SIZE bytes). Review will be focused and concise."
+          fi
+
+          echo "Creating JSON payload..."
+          # Create JSON payload safely using Python
+          python3 << 'PYTHON_EOF'
+          import json
+
+          with open('pr_diff.txt', 'r') as f:
+              diff_content = f.read()
+
+          payload = {
+              "model": "gpt-5.6-sol",
+              "temperature": 0.2,
+              "max_tokens": 8000,
+              "messages": [
+                  {
+                      "role": "user",
+                      "content": """You are a Principal Staff Software Engineer conducting code review. You are receiving a GIT DIFF of all changed lines. Note: ruff and type checking (mypy/pyright) already handle style, formatting, and type issues. Focus ONLY on: correctness, security, performance, and maintainability.
+
+          CRITICAL FOR LARGE PRs (100+ files):
+          1. Process file-by-file. Focus STRICTLY on '+' (additions) and '-' (deletions) lines.
+          2. Skip files with only formatting/whitespace changes.
+          3. If a single changed function exceeds 80-100 lines, flag as 'Maintainability' issue.
+          4. Keep explanations brief (avoid exceeding GitHub's 65,536 char comment limit).
+
+          REVIEW CHECKLIST (per logical block):
+          - Correctness: Edge cases, null/undefined handling, race conditions, off-by-one errors.
+          - Security: Injection risks, hardcoded secrets, missing auth checks, unsafe deserialization.
+          - Performance: N+1 queries, unoptimized loops, unnecessary allocations, missing caching.
+          - Maintainability: DRY/SOLID violations, unclear variable names, missing error handling, complex conditionals.
+
+          OUTPUT FORMAT (Markdown template for EVERY issue):
+          ### 🚨 [SEVERITY: Critical/High/Medium/Low] - [Brief Title]
+          - **File:** `[path]`
+          - **Lines:** `[approximate range]`
+          - **Problem:** [1 sentence: what is wrong and why it matters]
+          - **Solution:** [Copy-pasteable code fix with Before/After if needed]
+
+          RULES:
+          - If code is excellent: reply ONLY with "✅ LGTM. No critical issues, security risks, or performance bottlenecks found."
+          - Be direct, professional, specific. Skip praise.
+          - Do not hallucinate methods/variables from the diff.
+
+          Here is the PR diff to review:
+          ```diff
+          """ + diff_content + """
+          ```"""
+                  }
+              ]
+          }
+
+          with open('payload.json', 'w') as f:
+              json.dump(payload, f)
+          PYTHON_EOF
+
+          echo "Calling OpenAI API with gpt-5.6-sol..."
+          REVIEW_RESPONSE=$(curl -s https://api.openai.com/v1/chat/completions \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $OPENAI_API_KEY" \
+            -d @payload.json)
+
+          # Debug: print raw response
+          echo "API Response:"
+          echo "$REVIEW_RESPONSE" | jq '.' || echo "$REVIEW_RESPONSE"
+
+          # Check for API errors
+          if echo "$REVIEW_RESPONSE" | jq -e '.error' > /dev/null 2>&1; then
+            echo "❌ OpenAI API Error:"
+            echo "$REVIEW_RESPONSE" | jq '.error.message' 2>/dev/null || echo "$REVIEW_RESPONSE"
+            exit 1
+          fi
+
+          # Extract the review
+          REVIEW=$(echo "$REVIEW_RESPONSE" | jq -r '.choices[0].message.content // "ERROR: No content in response"')
+
+          if [ "$REVIEW" = "ERROR: No content in response" ] || [ -z "$REVIEW" ]; then
+            echo "❌ No review content received from API"
+            echo "Full response: $REVIEW_RESPONSE"
+            exit 1
+          fi
+
+          echo "Posting review to PR #$PR_NUMBER..."
+          gh pr comment $PR_NUMBER --body "## 🤖 GenAI Code Review
+
+          $REVIEW"
+
+          echo "✅ Code review posted successfully"
+          rm -f pr_diff.txt payload.json
