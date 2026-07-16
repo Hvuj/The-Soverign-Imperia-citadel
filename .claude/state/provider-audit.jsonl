@@ -1,0 +1,9 @@
+{"ts": 1784228419.534, "provider": "groq", "model": "openai/gpt-oss-120b", "task_id": "consensus", "bytes_sent": 278, "status": "pass", "note": "", "redacted": true}
+{"ts": 1784228419.582, "provider": "groq", "model": "openai/gpt-oss-20b", "task_id": "consensus", "bytes_sent": 278, "status": "error", "note": "BadRequestError", "redacted": true}
+{"ts": 1784228439.456, "provider": "nvidia", "model": "meta/llama-3.3-70b-instruct", "task_id": "consensus", "bytes_sent": 278, "status": "pass", "note": "", "redacted": true}
+{"ts": 1784228440.327, "provider": "groq", "model": "openai/gpt-oss-20b", "task_id": "judge-c0", "bytes_sent": 627, "status": "pass", "note": "", "redacted": true}
+{"ts": 1784228440.454, "provider": "groq", "model": "openai/gpt-oss-20b", "task_id": "judge-c1", "bytes_sent": 506, "status": "pass", "note": "", "redacted": true}
+{"ts": 1784228440.467, "provider": "groq", "model": "openai/gpt-oss-20b", "task_id": "judge-c3", "bytes_sent": 523, "status": "pass", "note": "", "redacted": true}
+{"ts": 1784228463.858, "provider": "nvidia", "model": "meta/llama-3.3-70b-instruct", "task_id": "judge-c0", "bytes_sent": 627, "status": "pass", "note": "", "redacted": true}
+{"ts": 1784228475.203, "provider": "nvidia", "model": "meta/llama-3.3-70b-instruct", "task_id": "judge-c1", "bytes_sent": 506, "status": "pass", "note": "", "redacted": true}
+{"ts": 1784228493.658, "provider": "nvidia", "model": "meta/llama-3.3-70b-instruct", "task_id": "judge-c3", "bytes_sent": 523, "status": "pass", "note": "", "redacted": true}

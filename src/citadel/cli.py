@@ -406,6 +406,43 @@ def _cmd_army(args: argparse.Namespace) -> int:
     return 0 if passed == len(outcomes) else 1
 
 
+def _cmd_consensus(args: argparse.Namespace) -> int:
+    from citadel.commands.consensus import run
+    return run(args)
+
+
+def _cmd_see(args: argparse.Namespace) -> int:
+    """Describe/analyze an image with a cloud vision model (NVIDIA VLM). Zero local cost."""
+    from citadel.services.execute.providers.vision import describe_image
+
+    prompt = " ".join(args.prompt).strip() if args.prompt else "Describe this image in detail."
+    out = describe_image(args.image, prompt, model=getattr(args, "model", None))
+    if out is None:
+        print("◆ The Sovereign — no vision provider available (set NVIDIA_API_KEY)")
+        return 1
+    print(out)
+    return 0
+
+
+def _cmd_image(args: argparse.Namespace) -> int:
+    """Generate an image from a text prompt (NVIDIA FLUX/SDXL) → a PNG artifact."""
+    import os
+    from pathlib import Path
+
+    from citadel.services.execute.providers.image_gen import generate_image
+
+    prompt = " ".join(args.prompt).strip()
+    out = args.out or str(Path(os.environ.get("CITADEL_WORKSPACE", ".")) / ".claude" / "state" / "images"
+                          / "generated.png")
+    model = getattr(args, "model", None) or "black-forest-labs/flux.1-schnell"
+    path = generate_image(prompt, out, model=model)
+    if path is None:
+        print("◆ The Sovereign — image generation unavailable (set NVIDIA_API_KEY)")
+        return 1
+    print(f"◆ The Sovereign — image written to {path}")
+    return 0
+
+
 def _cmd_mcp(args: argparse.Namespace) -> int:
     from citadel.commands.mcp_stack import run
     return run(args)
@@ -614,6 +651,29 @@ def _build_parser() -> argparse.ArgumentParser:
     p_setup.add_argument("--mcp", choices=["native", "compose"], default=None,
                          help="Write .mcp.json for the native (stdio) or compose (HTTP + Docker) MCP stack")
     p_setup.set_defaults(func=_cmd_setup)
+
+    p_consensus = sub.add_parser(
+        "consensus",
+        help="Run many models on one task in parallel, cross-validate, reduce to one verified answer",
+    )
+    p_consensus.add_argument("task", nargs="+", help="The task to solve by multi-model consensus")
+    p_consensus.add_argument("--workspace", default=None, help="Workspace path (default: current directory)")
+    p_consensus.add_argument("--code", action="store_true", help="Verify each candidate as Python (ast.parse)")
+    p_consensus.add_argument("--no-local", dest="no_local", action="store_true", help="Skip the local Ollama member")
+    p_consensus.add_argument("--local-model", dest="local_model", default=None, help="Ollama model for the local member")
+    p_consensus.set_defaults(func=_cmd_consensus)
+
+    p_see = sub.add_parser("see", help="Describe/analyze an image with a cloud vision model (NVIDIA VLM)")
+    p_see.add_argument("image", help="Path to the image file")
+    p_see.add_argument("prompt", nargs="*", help="What to ask about the image (default: describe it)")
+    p_see.add_argument("--model", default=None, help="Vision model (default: the provider's VLM)")
+    p_see.set_defaults(func=_cmd_see)
+
+    p_image = sub.add_parser("image", help="Generate an image from a text prompt (NVIDIA FLUX/SDXL)")
+    p_image.add_argument("prompt", nargs="+", help="The image prompt")
+    p_image.add_argument("--out", default=None, help="Output PNG path")
+    p_image.add_argument("--model", default=None, help="Image model (default: black-forest-labs/flux.1-schnell)")
+    p_image.set_defaults(func=_cmd_image)
 
     p_mcp = sub.add_parser("mcp", help="Manage the Docker MCP retrieval stack")
     p_mcp.add_argument("mcp_action", choices=["up", "down", "status", "pin"],
