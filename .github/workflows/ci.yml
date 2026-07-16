@@ -8,6 +8,12 @@ on:
     branches:
       - "**"
     types: [opened, synchronize]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'PR number to review (leave empty for current branch)'
+        required: false
+        type: string
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -67,7 +73,7 @@ jobs:
   code_review_job:
     runs-on: ubuntu-latest
     name: ChatGPT Code Review
-    if: github.event_name == 'pull_request' && github.event.pull_request.draft == false
+    if: github.event_name == 'workflow_dispatch' && github.event.pull_request.draft == false
     permissions:
       pull-requests: write
       contents: read
@@ -75,11 +81,20 @@ jobs:
       - name: Checkout Repository Code
         uses: actions/checkout@v4
 
+      - name: Determine PR Number
+        id: pr_number
+        run: |
+          if [ -n "${{ github.event.inputs.pr_number }}" ]; then
+            echo "pr_num=${{ github.event.inputs.pr_number }}" >> $GITHUB_OUTPUT
+          else
+            echo "pr_num=${{ github.event.number }}" >> $GITHUB_OUTPUT
+          fi
+
       - name: Run GenAI Code Review
         env:
           OPENAI_API_KEY: ${{ secrets.openai_api_key }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_NUMBER: ${{ github.event.number }}
+          PR_NUMBER: ${{ steps.pr_number.outputs.pr_num }}
           REPO: ${{ github.repository }}
         run: |
           #!/bin/bash
