@@ -406,6 +406,11 @@ def _cmd_army(args: argparse.Namespace) -> int:
     return 0 if passed == len(outcomes) else 1
 
 
+def _cmd_mcp(args: argparse.Namespace) -> int:
+    from citadel.commands.mcp_stack import run
+    return run(args)
+
+
 def _cmd_setup(args: argparse.Namespace) -> int:
     from citadel.commands.setup import run_setup
     return run_setup(args)
@@ -600,13 +605,21 @@ def _build_parser() -> argparse.ArgumentParser:
     p_setup.add_argument("--with-ml", action="store_true", dest="with_ml",
                          help="Also best-effort install llama-cpp-python (needs a compiler/wheel)")
     p_setup.add_argument("--workspace", default=None, help="Workspace path (default: current directory)")
+    p_setup.add_argument("--redis", choices=["local", "cloud"], default=None,
+                         help="local = our managed Redis Stack container; cloud = a managed Redis (with --redis-url)")
     p_setup.add_argument("--redis-url", dest="redis_url", default=None,
-                         help="Point the retrieval layer at this Redis (writes .citadel/config.toml [redis])")
+                         help="Redis URL (writes .citadel/config.toml [redis]); required for --redis cloud")
     p_setup.add_argument("--no-redis", dest="no_redis", action="store_true",
                          help="Disable Redis; use the pure-Python on-disk vector store")
     p_setup.add_argument("--mcp", choices=["native", "compose"], default=None,
                          help="Write .mcp.json for the native (stdio) or compose (HTTP + Docker) MCP stack")
     p_setup.set_defaults(func=_cmd_setup)
+
+    p_mcp = sub.add_parser("mcp", help="Manage the Docker MCP retrieval stack")
+    p_mcp.add_argument("mcp_action", choices=["up", "down", "status", "pin"],
+                       help="up = start the stack + write compose .mcp.json; pin = digest-pin reference images")
+    p_mcp.add_argument("--workspace", default=None, help="Workspace path (default: current directory)")
+    p_mcp.set_defaults(func=_cmd_mcp)
 
     p_doctor = sub.add_parser("doctor", help="Report what is installed / missing / how to fix")
     p_doctor.add_argument("--model", default=None, help="Local model to check for (default: qwen2.5-coder:7b)")

@@ -48,6 +48,23 @@ def test_compose_images_are_digest_pinned():
         assert images and all("@sha256:" in img for img in images), f"{name} image must be digest-pinned"
 
 
+def test_compose_launcher_fallback_uses_npx_uvx():
+    servers = build_mcp_config("compose", use_launchers=True)["mcpServers"]
+    # filesystem falls back to npx (cmd /c npx on Windows), git to uvx — per the official repo
+    fs = servers["filesystem"]
+    assert fs["command"] in ("npx", "cmd")
+    assert any("server-filesystem" in a for a in fs["args"])
+    assert servers["git"]["command"] == "uvx" and "mcp-server-git" in servers["git"]["args"]
+
+
+def test_compose_digests_are_injected():
+    servers = build_mcp_config("compose", digests={"filesystem": "sha256:abc123"})["mcpServers"]
+    fs_img = [a for a in servers["filesystem"]["args"] if a.startswith("mcp/")][0]
+    assert fs_img.endswith("@sha256:abc123")  # real digest replaced PIN_ME
+    # an un-pinned one keeps the placeholder
+    assert any("@sha256:PIN_ME" in a for a in servers["git"]["args"])
+
+
 def test_write_mcp_json_roundtrip(tmp_path):
     dest = write_mcp_json(tmp_path, "native", "redis://x:6379")
     assert dest.exists()

@@ -64,6 +64,20 @@ def test_nvidia_smi_probe_shape():
     assert isinstance(name, str) and name
 
 
+def test_probe_nvidia_gpus_enumerates_all(monkeypatch):
+    """Multi-GPU: parse every nvidia-smi row, not just GPU 0 (drives gpu_count)."""
+    class _Proc:
+        returncode = 0
+        stdout = "16384, NVIDIA RTX 5080\n24564, NVIDIA RTX 4090\n"
+
+    monkeypatch.setattr("shutil.which", lambda _n: "nvidia-smi")
+    monkeypatch.setattr("subprocess.run", lambda *a, **k: _Proc())
+    gpus = mb._probe_nvidia_gpus()
+    assert len(gpus) == 2
+    assert gpus[0][1] == "NVIDIA RTX 5080" and gpus[1][1] == "NVIDIA RTX 4090"
+    assert mb._probe_nvidia_smi() == gpus[0]  # single-GPU accessor returns the first
+
+
 def test_resolve_gguf_raises_filenotfound_not_nameerror():
     backend = mb.get_backend()
     with pytest.raises(FileNotFoundError):

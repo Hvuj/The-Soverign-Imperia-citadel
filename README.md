@@ -87,6 +87,9 @@ servers as stdio subprocesses and the retrieval layer uses the on-disk store —
 [docker/mcp/README.md](docker/mcp/README.md) for the egress-isolation model (reads in, data-out blocked)
 and digest-pinning of the open-source reference servers.
 
+**Redis local vs cloud, and every cache layer:** see [docs/REDIS-AND-CACHING.md](docs/REDIS-AND-CACHING.md).
+Bring MCP up over Docker with `citadel mcp up` (then `citadel mcp pin` / `citadel mcp status`).
+
 ## Quick start
 
 ```bash

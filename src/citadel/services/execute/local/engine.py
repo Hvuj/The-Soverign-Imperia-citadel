@@ -110,12 +110,13 @@ class OllamaEngine(LocalEngine):
             return False
 
     def generate(self, prompt: str, spec: RunSpec) -> str:
-        payload = {
-            "model": spec.model,
-            "prompt": prompt,
-            "stream": False,
-            "options": {"num_ctx": spec.n_ctx, "num_gpu": spec.n_gpu_layers, "num_thread": spec.threads},
-        }
+        options = {"num_ctx": spec.n_ctx, "num_thread": spec.threads}
+        # Only pin num_gpu when a caller explicitly set it (-1 = all layers on GPU, or a specific N).
+        # Leaving it unset lets Ollama's own scheduler use the GPU maximally and spread across ALL GPUs —
+        # so the default path never silently falls back to CPU (num_gpu=0 would force CPU).
+        if spec.n_gpu_layers != 0:
+            options["num_gpu"] = spec.n_gpu_layers
+        payload = {"model": spec.model, "prompt": prompt, "stream": False, "options": options}
         result = self._http_post(f"{self._host}/api/generate", payload, self._timeout)
         return str(result.get("response", "")).strip()
 

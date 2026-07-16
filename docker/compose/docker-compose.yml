@@ -15,9 +15,12 @@ networks:
     driver: bridge
 
 services:
+  # LOCAL Redis Stack — only started in local mode: `docker compose --profile local-redis up -d`.
+  # For CLOUD Redis, omit this profile and set CITADEL_REDIS_URL=rediss://user:pass@host:port in .env.
   redis:
     image: redis/redis-stack:latest   # PIN by @sha256 digest in production (D6)
     container_name: citadel-redis
+    profiles: ["local-redis"]
     ports:
       - "${CITADEL_REDIS_PORT:-6379}:6379"
     volumes:
@@ -34,7 +37,8 @@ services:
     environment:
       CITADEL_MCP_TRANSPORT: streamable-http
       CITADEL_WORKSPACE: /workspace
-      CITADEL_REDIS_URL: redis://redis:6379
+      # Local mode → the `redis` service; cloud mode → set CITADEL_REDIS_URL=rediss://… in .env.
+      CITADEL_REDIS_URL: ${CITADEL_REDIS_URL:-redis://redis:6379}
       # Reach the host's native Ollama (GPU) from inside the container.
       CITADEL_OLLAMA_HOST: http://host.docker.internal:11434
       CITADEL_EMBED_MODEL: ${CITADEL_EMBED_MODEL:-nomic-embed-text}
@@ -45,8 +49,29 @@ services:
       - "${CITADEL_WORKSPACE_HOST:-../..}:/workspace:ro"
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    depends_on:
-      - redis
+    restart: unless-stopped
+
+  # Opt-in containerized Ollama with ALL GPUs: `docker compose --profile ollama-gpu up -d`.
+  # Default is the host's native Ollama (simplest, keeps the GPU on the host). Use this on Linux/multi-GPU
+  # hosts that want Ollama in the stack. OLLAMA_SCHED_SPREAD spreads one model across every GPU.
+  ollama:
+    image: ollama/ollama:latest       # PIN by @sha256 in production
+    container_name: citadel-ollama
+    profiles: ["ollama-gpu"]
+    environment:
+      OLLAMA_SCHED_SPREAD: "1"         # use every GPU to the fullest for a single model
+      OLLAMA_KEEP_ALIVE: "30m"
+    ports:
+      - "11434:11434"
+    volumes:
+      - citadel-ollama-models:/root/.ollama
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all               # every GPU
+              capabilities: ["gpu"]
     restart: unless-stopped
 
   # Opt-in edge: `docker compose --profile edge up`. Terminates HTTP/2 + HTTP/3 (QUIC) and reverse-proxies to
@@ -69,3 +94,4 @@ services:
 volumes:
   citadel-redis-data:
   citadel-caddy-data:
+  citadel-ollama-models:

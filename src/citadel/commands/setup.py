@@ -114,12 +114,23 @@ def run_setup(args) -> int:
         print(f"  llama-cpp     : {'ok' if ok_ml else 'skipped/failed (needs a compiler or prebuilt wheel)'}")
 
     ws = Path(getattr(args, "workspace", None) or ".").resolve()
+    redis_mode = getattr(args, "redis", None)
+    redis_url = getattr(args, "redis_url", None)
     if getattr(args, "no_redis", False):
         paths.set_redis_config(ws, enabled=False)
         print("  redis         : disabled (pure-Python vector store)")
-    elif getattr(args, "redis_url", None):
-        paths.set_redis_config(ws, url=args.redis_url)
-        print(f"  redis         : configured -> {args.redis_url}")
+    elif redis_mode == "cloud":
+        if not redis_url:
+            print("  redis         : --redis cloud needs --redis-url rediss://user:pass@host:port")
+        else:
+            paths.set_redis_config(ws, url=redis_url)
+            print(f"  redis         : cloud -> {redis_url}")
+    elif redis_mode == "local" or redis_url:
+        url = redis_url or "redis://127.0.0.1:6379"
+        paths.set_redis_config(ws, url=url)
+        print(f"  redis         : local -> {url}")
+        print("     start our Redis: docker compose -f docker/compose/docker-compose.yml "
+              "--profile local-redis up -d redis")
     mcp_mode = getattr(args, "mcp", None)
     if mcp_mode in ("compose", "native"):
         from citadel.commands.mcp_setup import write_mcp_json
@@ -129,6 +140,17 @@ def run_setup(args) -> int:
 
     print("  -> run `citadel doctor` to verify.")
     return 0
+
+
+def _gpu_names() -> list[str]:
+    """Every NVIDIA GPU's name via nvidia-smi (empty if none). Used for the doctor GPU + multi-GPU line."""
+    exe = shutil.which("nvidia-smi")
+    if not exe:
+        return []
+    code, out = _run([exe, "--query-gpu=name", "--format=csv,noheader"], timeout=5)
+    if code != 0:
+        return []
+    return [line.strip() for line in out.splitlines() if line.strip()]
 
 
 def probe_redis(url: str) -> tuple[bool, bool]:
@@ -171,6 +193,20 @@ def _doctor_redis(ws, mark) -> None:
         print("       (unreachable — the retrieval layer uses the pure-Python on-disk store)")
 
 
+def _mcp_http_alive(port: int = 8848) -> bool:
+    """A Streamable-HTTP MCP endpoint answers a bare GET with a 4xx (handshake required) = alive."""
+    import urllib.error
+    import urllib.request
+
+    try:
+        urllib.request.urlopen(f"http://localhost:{port}/mcp", timeout=2)
+        return True
+    except urllib.error.HTTPError:
+        return True
+    except Exception:
+        return False
+
+
 def _doctor_mcp(ws, mark) -> None:
     import importlib.util
     import json
@@ -185,6 +221,8 @@ def _doctor_mcp(ws, mark) -> None:
         except (OSError, ValueError):
             pass
     print(f"  {mark(bool(servers))} .mcp.json servers: {', '.join(servers) or 'none'}")
+    if _mcp_http_alive():
+        print("  [ok] MCP HTTP endpoint http://localhost:8848/mcp (Docker stack up)")
 
 
 def run_doctor(args) -> int:
@@ -204,7 +242,13 @@ def run_doctor(args) -> int:
     print(f"  {mark(ollama_exe() is not None)} ollama installed")
     print(f"  {mark(ollama_server_up())} ollama server ({OLLAMA_HOST})")
     print(f"  {mark(ollama_has_model(model))} local model: {model}")
-    print(f"  {mark(shutil.which('nvidia-smi') is not None)} GPU (nvidia-smi)")
+    gpus = _gpu_names()
+    if gpus:
+        print(f"  [ok] GPU x{len(gpus)}: {', '.join(gpus)}")
+        if len(gpus) > 1:
+            print("       multi-GPU: set OLLAMA_SCHED_SPREAD=1 to spread one model across all GPUs")
+    else:
+        print(f"  {mark(shutil.which('nvidia-smi') is not None)} GPU (nvidia-smi)")
 
     ws = Path(getattr(args, "workspace", None) or ".").resolve()
     _doctor_redis(ws, mark)

@@ -140,6 +140,20 @@ def test_ollama_engine_forwards_gpu_and_parses_response():
     assert gen[1]["options"]["num_gpu"] == -1
 
 
+def test_generate_omits_num_gpu_when_zero_so_ollama_uses_the_gpu():
+    """RunSpec default n_gpu_layers=0 must NOT force num_gpu=0 (CPU) — omit it so Ollama uses the GPU fully."""
+    calls: list = []
+
+    def http_post(url, payload, timeout):
+        calls.append(payload)
+        return {"response": "ok"}
+
+    engine = OllamaEngine(http_post=http_post, http_get=lambda url, timeout: {"models": []})
+    engine.generate("hi", RunSpec(model="llama3", n_ctx=2048, threads=4))  # n_gpu_layers defaults to 0
+    options = calls[0]["options"]
+    assert "num_gpu" not in options  # omitted → Ollama's scheduler uses the GPU (and spreads across GPUs)
+
+
 def test_ollama_available_false_when_get_raises():
     def boom(url, timeout):
         raise OSError("connection refused")

@@ -475,6 +475,10 @@ or searching. **Reasoning** stays free-first (local model), cloud last. Every pi
    └──────────────────┘                          └────────────────────────────────┘
 ```
 
+> **Connecting it up:** Redis (local vs cloud), the RediSearch requirement, and every cache layer are
+> documented in [REDIS-AND-CACHING.md](REDIS-AND-CACHING.md). MCP-over-Docker is managed by
+> `citadel mcp up/down/status/pin`.
+
 ### 17.1 The Vector Spine (Z0)
 `services/retrieval/`: `LocalEngine.embed()` (model-agnostic — Ollama `nomic-embed-text` by default);
 a provenance-carrying **chunker** (path # index + byte range + content hash); **redaction before embedding**

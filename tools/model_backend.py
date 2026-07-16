@@ -55,6 +55,7 @@ class HardwareProfile:
     available_ram_gb: float
     vram_gb: float = 0.0
     cuda_device_name: str = ""
+    gpu_count: int = 0
     mps_available: bool = False
     torch_available: bool = False
     cuda_available: bool = False
@@ -68,7 +69,8 @@ class HardwareProfile:
             f"RAM          : {self.available_ram_gb:.1f} GB available / {self.total_ram_gb:.1f} GB total",
         ]
         if self.cuda_available:
-            lines.append(f"GPU          : {self.cuda_device_name} ({self.vram_gb:.1f} GB VRAM)")
+            count = f" x{self.gpu_count}" if self.gpu_count > 1 else ""
+            lines.append(f"GPU          : {self.cuda_device_name}{count} ({self.vram_gb:.1f} GB VRAM each)")
         elif self.mps_available:
             lines.append(f"GPU          : Apple Silicon MPS")
         return "\n".join(lines)
@@ -92,6 +94,7 @@ def detect_hardware() -> HardwareProfile:
     mps_available = False
     vram_gb = 0.0
     cuda_device_name = ""
+    gpu_count = 0
 
     if torch_available:
         try:
@@ -100,6 +103,7 @@ def detect_hardware() -> HardwareProfile:
             mps_available = getattr(torch.backends, "mps", None) is not None and torch.backends.mps.is_available()
 
             if cuda_available:
+                gpu_count = torch.cuda.device_count()
                 props = torch.cuda.get_device_properties(0)
                 vram_gb = props.total_memory / (1024 ** 3)
                 cuda_device_name = props.name
@@ -107,10 +111,11 @@ def detect_hardware() -> HardwareProfile:
             pass
 
     if not cuda_available:
-        smi = _probe_nvidia_smi()
-        if smi is not None:
+        gpus = _probe_nvidia_gpus()
+        if gpus:
             cuda_available = True
-            vram_gb, cuda_device_name = smi
+            gpu_count = len(gpus)
+            vram_gb, cuda_device_name = gpus[0]
 
     if cuda_available and vram_gb > 12:
         device = BackendDevice.CUDA_FULL
@@ -132,6 +137,7 @@ def detect_hardware() -> HardwareProfile:
         available_ram_gb=available_ram_gb,
         vram_gb=vram_gb,
         cuda_device_name=cuda_device_name,
+        gpu_count=gpu_count,
         mps_available=mps_available,
         torch_available=torch_available,
         cuda_available=cuda_available,
@@ -207,33 +213,39 @@ def _probe_available_ram_gb() -> float:
     return _system_memory_bytes()[1] / (1024 ** 3)
 
 
-def _probe_nvidia_smi() -> tuple[float, str] | None:
-    """Detect an NVIDIA GPU via nvidia-smi when torch is absent. Returns (vram_gb, device_name)."""
+def _probe_nvidia_gpus() -> list[tuple[float, str]]:
+    """Enumerate EVERY NVIDIA GPU via nvidia-smi. Returns [(vram_gb, name), ...] (empty if none/torch-less)."""
     import shutil
     import subprocess
 
     exe = shutil.which("nvidia-smi")
     if not exe:
-        return None
+        return []
     try:
         proc = subprocess.run(
             [exe, "--query-gpu=memory.total,name", "--format=csv,noheader,nounits"],
-            capture_output=True,
-            text=True,
-            timeout=5,
+            capture_output=True, text=True, timeout=5,
         )
     except (OSError, subprocess.SubprocessError):
-        return None
+        return []
     if proc.returncode != 0 or not proc.stdout.strip():
-        return None
-    first = proc.stdout.strip().splitlines()[0]
-    if "," not in first:
-        return None
-    mem_mib, name = first.split(",", 1)
-    try:
-        return float(mem_mib.strip()) / 1024.0, name.strip()
-    except ValueError:
-        return None
+        return []
+    gpus: list[tuple[float, str]] = []
+    for line in proc.stdout.strip().splitlines():
+        if "," not in line:
+            continue
+        mem_mib, name = line.split(",", 1)
+        try:
+            gpus.append((float(mem_mib.strip()) / 1024.0, name.strip()))
+        except ValueError:
+            continue
+    return gpus
+
+
+def _probe_nvidia_smi() -> tuple[float, str] | None:
+    """First GPU's (vram_gb, device_name) — per-GPU VRAM drives the model-size tier. None if no GPU."""
+    gpus = _probe_nvidia_gpus()
+    return gpus[0] if gpus else None
 
 
 @dataclass
