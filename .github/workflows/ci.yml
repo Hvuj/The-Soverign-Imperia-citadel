@@ -67,7 +67,7 @@ jobs:
   code_review_job:
     runs-on: ubuntu-latest
     name: ChatGPT Code Review
-    if: github.event.pull_request.draft == false
+    if: github.event_name == 'pull_request' && github.event.pull_request.draft == false
     permissions:
       pull-requests: write
       contents: read
@@ -100,8 +100,9 @@ jobs:
             echo "⚠️ WARNING: PR diff is very large ($FILE_SIZE bytes). Review will be focused and concise."
           fi
 
-                    # Create JSON payload safely using Python
-                    python3 << 'PYTHON_EOF'
+          echo "Creating JSON payload..."
+          # Create JSON payload safely using Python
+          python3 << 'PYTHON_EOF'
           import json
 
           with open('pr_diff.txt', 'r') as f:
@@ -158,6 +159,10 @@ jobs:
             -H "Authorization: Bearer $OPENAI_API_KEY" \
             -d @payload.json)
 
+          # Debug: print raw response
+          echo "API Response:"
+          echo "$REVIEW_RESPONSE" | jq '.' || echo "$REVIEW_RESPONSE"
+
           # Check for API errors
           if echo "$REVIEW_RESPONSE" | jq -e '.error' > /dev/null 2>&1; then
             echo "❌ OpenAI API Error:"
@@ -166,10 +171,11 @@ jobs:
           fi
 
           # Extract the review
-          REVIEW=$(echo "$REVIEW_RESPONSE" | jq -r '.choices[0].message.content // empty')
+          REVIEW=$(echo "$REVIEW_RESPONSE" | jq -r '.choices[0].message.content // "ERROR: No content in response"')
 
-          if [ -z "$REVIEW" ]; then
+          if [ "$REVIEW" = "ERROR: No content in response" ] || [ -z "$REVIEW" ]; then
             echo "❌ No review content received from API"
+            echo "Full response: $REVIEW_RESPONSE"
             exit 1
           fi
 
