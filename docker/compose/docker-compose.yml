@@ -49,5 +49,23 @@ services:
       - redis
     restart: unless-stopped
 
+  # Opt-in edge: `docker compose --profile edge up`. Terminates HTTP/2 + HTTP/3 (QUIC) and reverse-proxies to
+  # the uvicorn MCP server — the standard, zero-app-change way to add h2/h3/TLS for LAN/remote access.
+  # Not needed for localhost (plain HTTP/1.1 keep-alive is fine there).
+  caddy:
+    image: caddy:2
+    container_name: citadel-caddy
+    profiles: ["edge"]
+    ports:
+      - "8443:8443"        # HTTP/2 over TLS
+      - "8443:8443/udp"    # HTTP/3 (QUIC)
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - citadel-caddy-data:/data
+    depends_on:
+      - citadel-mcp
+    restart: unless-stopped
+
 volumes:
   citadel-redis-data:
+  citadel-caddy-data:

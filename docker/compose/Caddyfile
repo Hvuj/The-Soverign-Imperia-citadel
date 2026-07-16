@@ -1,0 +1,15 @@
+# Caddy edge for the MCP retrieval server — HTTP/2 + HTTP/3 (QUIC) termination, zero app changes.
+# `docker compose --profile edge up` then point an MCP client at https://localhost:8443/mcp.
+# Caddy negotiates h2/h3 automatically over TLS; it proxies plain HTTP/1.1 to the uvicorn server.
+
+{
+	# HTTP/3 (QUIC) is enabled by default in Caddy v2.6+. Make the protocol set explicit.
+	servers {
+		protocols h1 h2 h3
+	}
+}
+
+https://localhost:8443 {
+	tls internal          # Caddy's local CA — self-signed cert so h2/h3 (which require TLS) work locally
+	reverse_proxy citadel-mcp:8848
+}

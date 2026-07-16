@@ -6,14 +6,14 @@ model_backend's hardware detection (CUDA/MPS ``n_gpu_layers``), and OllamaEngine
 Ollama offloads to the GPU when one is present.
 """
 
-import json
 import os
-import urllib.request
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass
 
 from citadel.services.execute.local._backend import load_model_backend
+from citadel.services.execute.local.http_client import pooled_get as _default_http_get
+from citadel.services.execute.local.http_client import pooled_post as _default_http_post
 
 
 @dataclass(slots=True)
@@ -82,18 +82,6 @@ class LlamaCppEngine(LocalEngine):
         if embed_fn is None:
             raise NotImplementedError("llama_cpp backend has no embed()")
         return [list(embed_fn(text)) for text in texts]
-
-
-def _default_http_post(url: str, payload: dict, timeout: float) -> dict:
-    data = json.dumps(payload).encode("utf-8")
-    request = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
-    with urllib.request.urlopen(request, timeout=timeout) as resp:
-        return json.loads(resp.read().decode("utf-8"))
-
-
-def _default_http_get(url: str, timeout: float) -> dict:
-    with urllib.request.urlopen(url, timeout=timeout) as resp:
-        return json.loads(resp.read().decode("utf-8"))
 
 
 class OllamaEngine(LocalEngine):

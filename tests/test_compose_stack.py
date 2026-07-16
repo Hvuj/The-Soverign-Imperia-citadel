@@ -37,3 +37,10 @@ def test_workspace_is_mounted_read_only():
 def test_egress_network_is_defined():
     networks = _compose()["networks"]
     assert "citadel_egress" in networks and networks["citadel_egress"]["name"] == "citadel_egress"
+
+
+def test_edge_h2_h3_proxy_is_opt_in():
+    caddy = _compose()["services"]["caddy"]
+    assert caddy["profiles"] == ["edge"]  # not started for a plain localhost `up`
+    ports = " ".join(str(p) for p in caddy["ports"])
+    assert "8443:8443/udp" in ports  # HTTP/3 (QUIC) over UDP is exposed

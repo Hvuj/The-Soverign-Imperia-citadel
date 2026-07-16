@@ -24,6 +24,7 @@ PIP_EXTRAS = [
     # Zero-Token retrieval + MCP (all optional; the layer degrades to a pure-Python store without them)
     "redis>=5",
     "numpy>=1.26",
+    "httpx>=0.27",
     "mcp>=1.27,<2",
 ]
 CITADEL_MCP_PORT = 8848
@@ -197,7 +198,7 @@ def run_doctor(args) -> int:
 
     model = getattr(args, "model", None) or OLLAMA_DEFAULT_MODEL
     print("◆ The Sovereign — doctor")
-    for mod in ("anthropic", "watchdog", "yaml", "psutil", "xdist"):
+    for mod in ("anthropic", "watchdog", "yaml", "psutil", "xdist", "httpx", "redis", "numpy"):
         print(f"  {mark(importlib.util.find_spec(mod) is not None)} python: {mod}")
     print(f"  {mark(shutil.which('claude') is not None)} engine CLI on PATH")
     print(f"  {mark(ollama_exe() is not None)} ollama installed")
