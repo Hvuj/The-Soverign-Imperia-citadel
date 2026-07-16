@@ -29,11 +29,19 @@ ai = ["anthropic>=0.116.0"]
 daemons = ["watchdog>=6.0.0"]
 reports = ["matplotlib>=3.11.0"]
 obsidian = ["PyYAML>=6.0.3", "watchdog>=6.0.0"]
+# Zero-Token Sovereign: dense retrieval (Redis Stack vector store + NumPy-accelerated cosine).
+# All optional — the retrieval layer degrades to a pure-Python on-disk vector file when absent.
+retrieval = ["redis>=5", "numpy>=1.26"]
+# Our own MCP retrieval server on the official SDK (stable v1.x line; v2 is pre-release).
+mcp = ["mcp>=1.27,<2"]
 all = [
   "anthropic>=0.116.0",
   "watchdog>=6.0.0",
   "matplotlib>=3.11.0",
   "PyYAML>=6.0.3",
+  "redis>=5",
+  "numpy>=1.26",
+  "mcp>=1.27,<2",
 ]
 
 [project.scripts]

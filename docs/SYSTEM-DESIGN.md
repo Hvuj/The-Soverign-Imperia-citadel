@@ -6,7 +6,7 @@
 > the system speaks to the operator as **The Sovereign**.
 
 This document is the authoritative description of the *current, built* design — every subsystem named
-here exists in `src/citadel/` and is covered by the test suite (**659 passing, 3 platform-skipped**).
+here exists in `src/citadel/` and is covered by the test suite (**744 passing, 3 platform-skipped**).
 Where a capability is a primitive that is built-and-tested but not yet wired into every live call path,
 it is marked **[adoption pending]** — those are integration steps, not missing designs.
 
@@ -30,6 +30,7 @@ it is marked **[adoption pending]** — those are integration steps, not missing
 14. [Testing & verification](#14-testing--verification)
 15. [Naming, taxonomy & the Legion](#15-naming-taxonomy--the-legion)
 16. [Roadmap status](#16-roadmap-status)
+17. [The Zero-Token layer — free read/search/learn for any AI](#17-the-zero-token-layer--free-readsearchlearn-for-any-ai)
 
 ---
 
@@ -401,9 +402,9 @@ log (verdicts, confidence), and never holds secrets (redaction runs before anyth
 
 - **Command:** `$env:PYTHONPATH='src'; python -m pytest -q -n auto --dist loadscope`
   (pytest-xdist parallel; a `serial` marker exists for the few order-sensitive tests).
-- **Current:** **659 passed, 3 skipped** (skips are platform-gated: AF_UNIX socket, `grep`, a statusline
-  template asset not in this checkout). Live Ollama tests run when a server + model are present and skip
-  otherwise.
+- **Current:** **744 passed, 3 skipped** (skips are platform-gated: AF_UNIX socket, `grep`, a statusline
+  template asset not in this checkout). Live Ollama / Redis / Docker tests run when those are present and
+  skip otherwise.
 - **Full-codebase smoke:** `tests/test_codebase_smoke.py` `py_compile`s every `tools/` + `src/` file and
   imports every `citadel` module — so a crash anywhere in the tree is caught, not just in tested paths.
 - The control plane has dedicated suites: `test_authority`, `test_law`, `test_trust`, `test_empire`,
@@ -448,6 +449,78 @@ serve path, the `Imperium` base class under the live services, *provocatio* + `c
 validator, TrustLedger on the live verdict path) into every runtime call path — the same
 "primitives-first, adoption-incremental" pattern used throughout. The architecture described above is
 whole and verified.
+
+---
+
+## 17. The Zero-Token layer — free read/search/learn for any AI
+
+The newest layer makes *reading, searching, and learning over code* cost **zero model tokens** — for the
+local model **and for Claude (or any AI) itself**. The insight is a clean split: **retrieval** (read /
+search / context assembly) is offloaded entirely to a local service and exposed through an **MCP server**,
+so an AI calls a tool that returns pre-digested, redacted, *cited* context — it never spends tokens scanning
+or searching. **Reasoning** stays free-first (local model), cloud last. Every piece is live-proven.
+
+```
+   ANY AI ──MCP──▶ citadel_search / citadel_read / citadel_context   (0 model tokens)
+                          │
+   ┌──────────────────────▼─────────────────────────────────────────────────────┐
+   │ RetrievalService (services/retrieval/service.py) — hybrid: dense KNN over    │
+   │ the embedder's vectors, re-scored by sparse keyword overlap; count-first +   │
+   │ redacted + cited (path+byte range).                                          │
+   └───┬───────────────────────────────────────────────┬─────────────────────────┘
+   ┌───▼─────────────┐                          ┌───────▼───────────────────────┐
+   │ VECTOR STORE     │  Redis Stack (RediSearch │  LEARNING Z-WORKERS            │
+   │ model-tagged,    │  HNSW) OR pure-Python    │  embedder · retriever ·        │
+   │ JIT-fresh (D3)   │  on-disk cosine fallback │  optimizer  → citadel workers │
+   └──────────────────┘                          └────────────────────────────────┘
+```
+
+### 17.1 The Vector Spine (Z0)
+`services/retrieval/`: `LocalEngine.embed()` (model-agnostic — Ollama `nomic-embed-text` by default);
+a provenance-carrying **chunker** (path # index + byte range + content hash); **redaction before embedding**
+(secrets never enter the store); a **model-tagged vector store** — Redis Stack RediSearch/HNSW when present,
+a pure-Python NumPy-accelerated on-disk cosine store otherwise; a content-hash **embed cache**; and an
+**indexer** that JIT-skips files whose content is unchanged (D3). Swapping the embed model starts a fresh
+namespace — vectors can never be silently mixed.
+
+### 17.2 The learning Z-workers (Z1, Z4)
+Background daemons you can watch in **`citadel workers`**:
+- **embedder** (`tools/embedder_daemon.py`) — embeds changed files into the vector store (extends the
+  existing incremental pipeline), publishing live chunk counts.
+- **retriever** — learns hit/miss and **self-tunes** the cosine threshold (no magic 0.95 constant).
+- **optimizer** (`services/execute/optimizer.py`, `citadel optimize`) — proposes code optimizations,
+  **sandbox-verifies before trusting**, records a verdict + pre-image, and applies only on a verified pass.
+  System code auto-applies behind its verifier; user code is **propose-only** (a verified diff). Proven live
+  turning an O(n²) dedup into `list(dict.fromkeys(items))`, behavior-verified, zero tokens.
+
+### 17.3 The zero-token answer (Z3)
+`citadel ask "…"` retrieves cited context and answers on the local model, free. A repeat is served from a
+**content-hash-gated cache** — reused **only** while every cited file is still fresh; edit a cited file and
+the next ask re-answers. This is the fix for the classic "stale semantic cache" bug: query similarity
+selects a candidate, content hashes *authorize* the reuse.
+
+### 17.4 The MCP bridge + network security (Z2)
+Two servers expose the retrieval service: the zero-dep stdlib `tools/citadel_mcp_server.py` and a **FastMCP**
+server (`src/citadel/mcp/server.py`, official SDK) shipped as a Docker image. The security rule is
+asymmetric and enforced at the container layer — **reads in, data-out blocked** (the *Pomerium extended to
+the network*): servers that touch your code run `--network none` (your code physically cannot leave), only
+Fetch/Context7 get the internet and only to an allowlist, the exec-sandbox is `--network none`, and every
+third-party image is **pinned by digest**. Proven live: a `--network none` container is blocked from the
+internet while still reading locally. See `docker/mcp/`.
+
+### 17.5 The agent army (Z5)
+`services/army/`: **TaskForge** decomposes a goal into atomic tasks so small a tiny local model is 100%
+correct, routing each via `policy.route` (most stay free/local). A **Redis Streams** job queue (in-memory
+fallback) fans them out to a concurrent **WorkerPool** where every worker runs under a **fasces capability +
+TTL lease** from the control plane (attenuated to reversible rods — no worker can do something
+irreversible), concurrency VRAM-bounded, expired leases reaped. Results are **verified before they count**.
+`citadel army "<goal>"`. Proven live: 5 atomic tasks across 4 concurrent workers over real Redis Streams,
+all verified, leases reaped, zero cloud tokens.
+
+**The eleven weak spots** in the original zero-token proposal are all corrected in the build: content-hash
+cache gating, self-tuned thresholds, verified-before-trust, embed-model drift tags, redact-before-embed,
+budget/eviction, no daemon duplication, cheap-first retrieval, model-agnostic embeddings, lease-governed
+agents, and MCP egress/supply-chain isolation.
 
 ---
 

@@ -1,0 +1,53 @@
+# The Zero-Token Sovereign — one-command stack (Phase: onboarding).
+#
+#   docker compose -f docker/compose/docker-compose.yml up -d
+#
+# Brings up Redis Stack (RediSearch/HNSW) + our MCP retrieval server over Streamable HTTP. The user installs
+# ONE thing (Docker); this stands up the rest. Reference MCP servers (filesystem/git/fetch/…) are launched
+# per-session by the client via `docker run --network none` (see ../mcp/mcp-servers.json) and attach to the
+# `citadel_egress` network defined here when they need the internet. Pin every image by @sha256 in prod
+# (run ./pin-images.sh). A no-Docker native fallback exists — see the repo README.
+
+networks:
+  # Stable external-facing name so `docker run --network citadel_egress` (Fetch) can find it.
+  citadel_egress:
+    name: citadel_egress
+    driver: bridge
+
+services:
+  redis:
+    image: redis/redis-stack:latest   # PIN by @sha256 digest in production (D6)
+    container_name: citadel-redis
+    ports:
+      - "${CITADEL_REDIS_PORT:-6379}:6379"
+    volumes:
+      - citadel-redis-data:/data
+    restart: unless-stopped
+
+  citadel-mcp:
+    build:
+      context: ../..
+      dockerfile: docker/mcp/Dockerfile
+    image: citadel-mcp:local
+    container_name: citadel-mcp
+    command: ["--transport", "streamable-http", "--host", "0.0.0.0", "--port", "8848"]
+    environment:
+      CITADEL_MCP_TRANSPORT: streamable-http
+      CITADEL_WORKSPACE: /workspace
+      CITADEL_REDIS_URL: redis://redis:6379
+      # Reach the host's native Ollama (GPU) from inside the container.
+      CITADEL_OLLAMA_HOST: http://host.docker.internal:11434
+      CITADEL_EMBED_MODEL: ${CITADEL_EMBED_MODEL:-nomic-embed-text}
+    ports:
+      - "${CITADEL_MCP_PORT:-8848}:8848"
+    volumes:
+      # Workspace mounted READ-ONLY — the server serves the index; vectors live in Redis.
+      - "${CITADEL_WORKSPACE_HOST:-../..}:/workspace:ro"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - redis
+    restart: unless-stopped
+
+volumes:
+  citadel-redis-data:

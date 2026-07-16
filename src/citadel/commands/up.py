@@ -238,6 +238,19 @@ def _start_zombie_worker_daemon(ws: Path) -> None:
     print(f"[3e/11] zombie worker daemon: {status}")
 
 
+def _start_embedder_daemon(ws: Path) -> None:
+    pid = start_daemon(
+        tool_name="embedder_daemon.py",
+        ws=ws,
+        daemon_args=["--watch"],
+        pidfile_rel=".claude/state/embedder-daemon.pid",
+        out_rel=".claude/state/embedder-daemon.out.log",
+        err_rel=".claude/state/embedder-daemon.err.log",
+    )
+    status = f"pid={pid}" if pid else "FAILED (optional)"
+    print(f"[3f/11] embedder z-worker: {status}")
+
+
 def _run_self_heal(ws: Path) -> None:
     ok = run_tool("legion_self_heal.py", ws, ["--fix", "--quiet"])
     print(f"[self-heal] init self-heal: {'OK' if ok else 'WARN (non-fatal)'}")
@@ -504,6 +517,7 @@ def run(
     _start_ram_cache_daemon(ws)
     _start_bug_record_daemon(ws)
     _start_zombie_worker_daemon(ws)
+    _start_embedder_daemon(ws)
     _run_preflight(ws)
     _build_brain_search_index(ws, step=5)
     _build_implementation_cache_index(ws)

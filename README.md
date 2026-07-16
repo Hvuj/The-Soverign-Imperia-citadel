@@ -45,6 +45,7 @@ citadel init ~/code/my-project --branch main
 | **Ollama** (local, free inference) | winget (Windows) / official script (macOS/Linux) |
 | A local **code** model (`qwen2.5-coder:7b`, ~4.7 GB, ~5 GB VRAM) | `ollama pull` — powers free verified coding; override with `citadel setup --model <tag>` on smaller GPUs |
 | Python extras (anthropic, watchdog, PyYAML, psutil, matplotlib, pytest-xdist) | pip |
+| Zero-Token retrieval + MCP (`redis`, `numpy`, `mcp`) | pip — powers dense search + the MCP bridge (optional; degrades to a pure-Python store) |
 | `llama-cpp-python` (opt-in: `citadel setup --with-ml`) | pip — needs a compiler or prebuilt wheel |
 
 **You provide these yourself (true prerequisites):**
@@ -56,6 +57,35 @@ citadel init ~/code/my-project --branch main
 | **NVIDIA driver + CUDA** (optional) | GPU-accelerated local inference; the CPU path works without it |
 
 Run **`citadel doctor`** any time to see what is installed, what is missing, and how to fix it.
+
+### The Zero-Token stack (Redis + MCP) — one command
+
+The Zero-Token layer makes **read / search / answer cost 0 model tokens for any AI** (dense retrieval +
+an MCP bridge). It works with **no extra setup** out of the box — the vector store falls back to a
+pure-Python on-disk index and the MCP servers run as local stdio processes. For scale and native HNSW
+vectors, stand up the full stack with **one prerequisite (Docker)**:
+
+```bash
+# Brings up Redis Stack (RediSearch/HNSW) + our MCP retrieval server over HTTP
+docker compose -f docker/compose/docker-compose.yml up -d
+
+# Point the workspace at it + write the compose-flavoured .mcp.json
+citadel setup --mcp compose
+citadel doctor            # verify: redis reachable, RediSearch, MCP servers registered
+```
+
+**Redis is configurable** — precedence is `--redis-url` > `CITADEL_REDIS_URL` env >
+`.citadel/config.toml [redis]` > default `redis://127.0.0.1:6379`:
+
+```bash
+citadel setup --redis-url redis://my-redis-host:6379   # use your own Redis (writes .citadel/config.toml)
+citadel setup --no-redis                               # opt out → pure-Python on-disk vector store
+```
+
+**No Docker?** Skip the compose step entirely: `citadel setup --mcp native` (the default) runs the MCP
+servers as stdio subprocesses and the retrieval layer uses the on-disk store — still zero-token. See
+[docker/mcp/README.md](docker/mcp/README.md) for the egress-isolation model (reads in, data-out blocked)
+and digest-pinning of the open-source reference servers.
 
 ## Quick start
 
@@ -72,9 +102,12 @@ citadel down                                   # stop everything when done
 
 | Command | Description |
 |---|---|
-| `citadel setup [--model M] [--with-ml]` | **Auto-install** Ollama + a local model + Python extras — so you only install citadel |
-| `citadel doctor` | Report what is installed / missing / how to fix (Ollama, model, GPU, extras) |
+| `citadel setup [--model M] [--with-ml] [--redis-url URL] [--no-redis] [--mcp native\|compose]` | **Auto-install** Ollama + model + Python extras; configure Redis + write the `.mcp.json` flavour |
+| `citadel doctor` | Report what is installed / missing / how to fix (Ollama, model, GPU, **Redis + RediSearch, MCP servers**) |
 | `citadel do "<task>"` | Run a task **The Sovereign way**: free local Ollama first, escalate to the cloud only if needed |
+| `citadel ask "<question>"` | Answer grounded in the local index with citations — retrieval + answer cost **0 model tokens** |
+| `citadel optimize <file> [--apply]` | Optimize a file locally, **verified before trust** (your code is propose-only unless `--apply`) |
+| `citadel army "<goal>"` | Decompose a goal into atomic tasks and run them on a concurrent, lease-governed local pool |
 | `citadel init <workspace> [--branch BRANCH]` | Full auto-learn: scaffold, index, git-mine, bootstrap memory |
 | `citadel up [--restart] [--no-ui] [--dry-run]` | Bring up the full brain and launch the session |
 | `citadel down [--workspace PATH]` | Stop all Citadel daemons + UI server and clean pidfiles |

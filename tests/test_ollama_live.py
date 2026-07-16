@@ -19,19 +19,27 @@ from citadel.services.execute import (
 
 _HOST = "http://localhost:11434"
 _MODEL = "qwen2.5:0.5b"
+_EMBED_MODEL = "nomic-embed-text"
 
 
 def _server_up() -> bool:
     return OllamaEngine(host=_HOST).available()
 
 
-def _has_model() -> bool:
+def _tags() -> list[dict]:
     try:
         with urllib.request.urlopen(f"{_HOST}/api/tags", timeout=3) as resp:
-            tags = json.loads(resp.read().decode("utf-8"))
+            return json.loads(resp.read().decode("utf-8")).get("models", [])
     except Exception:
-        return False
-    return any(_MODEL in (m.get("name") or "") for m in tags.get("models", []))
+        return []
+
+
+def _has_model() -> bool:
+    return any(_MODEL in (m.get("name") or "") for m in _tags())
+
+
+def _has_embed_model() -> bool:
+    return any(_EMBED_MODEL in (m.get("name") or "") for m in _tags())
 
 
 pytestmark = pytest.mark.skipif(
@@ -111,3 +119,30 @@ def test_local_coding_executor_multifile_live(tmp_path):
                   allowed_files=["a.py", "b.py"])
     )
     assert result.status in ("pass", "needs_fix")
+
+
+@pytest.mark.skipif(not _has_embed_model(), reason=f"embedding model {_EMBED_MODEL} not available")
+def test_dense_retrieval_semantic_top1_live(tmp_path):
+    """Phase Z0 live gate: real embeddings retrieve the semantically-matching chunk, zero cloud tokens."""
+    from citadel.services.retrieval import EmbedCache, VectorStore, index_file, is_stale, search
+
+    engine = OllamaEngine(host=_HOST)
+    vec = engine.embed(["probe"], _EMBED_MODEL)[0]
+    store = VectorStore(embed_model=_EMBED_MODEL, dim=len(vec), path=tmp_path / "v.json", prefer_redis=False)
+    cache = EmbedCache(_EMBED_MODEL, path=tmp_path / "c.json", prefer_redis=False)
+
+    f = tmp_path / "sample.py"
+    f.write_text(
+        "def load_yaml_config(path):\n    import yaml\n    return yaml.safe_load(open(path))\n\n\n"
+        "def compute_checksum(data):\n    import hashlib\n    return hashlib.sha256(data).hexdigest()\n",
+        encoding="utf-8",
+    )
+    index_file(f, engine=engine, store=store, cache=cache, embed_model=_EMBED_MODEL, repo_root=tmp_path)
+    hits = search("how do I read a yaml configuration file", engine=engine, store=store,
+                  embed_model=_EMBED_MODEL, top_k=2)
+    assert hits and "yaml" in hits[0][1].text
+
+    again = index_file(f, engine=engine, store=store, cache=cache, embed_model=_EMBED_MODEL, repo_root=tmp_path)
+    assert again.skipped_fresh is True
+    f.write_text(f.read_text(encoding="utf-8") + "\n# edit\n", encoding="utf-8")
+    assert is_stale(store, f, "sample.py") is True

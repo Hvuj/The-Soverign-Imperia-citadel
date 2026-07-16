@@ -68,3 +68,33 @@ def test_unknown_tool_errors(ws: Path):
          "params": {"name": "nope", "arguments": {}}},
     ])
     assert resp[0]["error"]["code"] == -32602
+
+
+def test_retrieval_tools_listed(ws: Path):
+    resp = _talk(ws, [
+        {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}},
+        {"jsonrpc": "2.0", "id": 2, "method": "tools/list"},
+    ])
+    names = {t["name"] for t in resp[1]["result"]["tools"]}
+    assert {"citadel_search", "citadel_read", "citadel_context"} <= names
+
+
+def test_citadel_read_is_scoped_and_redacted(ws: Path):
+    (ws / "conf.py").write_text("TOKEN=sk-abcdefghijklmnop1234\nvalue = 1\n", encoding="utf-8")
+    resp = _talk(ws, [
+        {"jsonrpc": "2.0", "id": 6, "method": "tools/call",
+         "params": {"name": "citadel_read", "arguments": {"path": "conf.py"}}},
+    ])
+    payload = json.loads(resp[0]["result"]["content"][0]["text"])
+    assert "sk-abcdefghijklmnop1234" not in payload.get("body", "")
+    assert "preamble" in payload
+
+
+def test_citadel_search_returns_a_shape(ws: Path):
+    # Ollama may be absent in CI → the tool degrades to count 0, never crashes.
+    resp = _talk(ws, [
+        {"jsonrpc": "2.0", "id": 7, "method": "tools/call",
+         "params": {"name": "citadel_search", "arguments": {"query": "anything", "top_k": 3}}},
+    ])
+    payload = json.loads(resp[0]["result"]["content"][0]["text"])
+    assert "count" in payload and "hits" in payload

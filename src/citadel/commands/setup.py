@@ -21,7 +21,12 @@ PIP_EXTRAS = [
     "psutil>=5.9",
     "matplotlib>=3.11.0",
     "pytest-xdist>=3.8.0",
+    # Zero-Token retrieval + MCP (all optional; the layer degrades to a pure-Python store without them)
+    "redis>=5",
+    "numpy>=1.26",
+    "mcp>=1.27,<2",
 ]
+CITADEL_MCP_PORT = 8848
 
 
 def _run(cmd: list[str], timeout: float | None = None) -> tuple[int, str]:
@@ -93,6 +98,8 @@ def pip_install(pkgs: list[str]) -> tuple[bool, str]:
 
 
 def run_setup(args) -> int:
+    from citadel import paths
+
     print("◆ The Sovereign — setup")
     ok, out = pip_install(PIP_EXTRAS)
     print(f"  python extras : {'ok' if ok else 'FAILED'}")
@@ -104,8 +111,79 @@ def run_setup(args) -> int:
     if getattr(args, "with_ml", False):
         ok_ml, _ = pip_install(["llama-cpp-python"])
         print(f"  llama-cpp     : {'ok' if ok_ml else 'skipped/failed (needs a compiler or prebuilt wheel)'}")
+
+    ws = Path(getattr(args, "workspace", None) or ".").resolve()
+    if getattr(args, "no_redis", False):
+        paths.set_redis_config(ws, enabled=False)
+        print("  redis         : disabled (pure-Python vector store)")
+    elif getattr(args, "redis_url", None):
+        paths.set_redis_config(ws, url=args.redis_url)
+        print(f"  redis         : configured -> {args.redis_url}")
+    mcp_mode = getattr(args, "mcp", None)
+    if mcp_mode in ("compose", "native"):
+        from citadel.commands.mcp_setup import write_mcp_json
+
+        write_mcp_json(ws, mcp_mode, paths.resolve_redis_url(ws))
+        print(f"  mcp           : {mcp_mode} config written to .mcp.json")
+
     print("  -> run `citadel doctor` to verify.")
     return 0
+
+
+def probe_redis(url: str) -> tuple[bool, bool]:
+    """Return (reachable, has_RediSearch). Never raises."""
+    try:
+        import redis
+
+        client = redis.from_url(url, protocol=2, socket_connect_timeout=1.5)
+        client.ping()
+    except Exception:
+        return False, False
+    try:
+        names: set[str] = set()
+        for mod in client.execute_command("MODULE", "LIST"):
+            if isinstance(mod, dict):
+                names.add(mod.get(b"name") or mod.get("name"))
+            elif isinstance(mod, (list, tuple)):
+                for i, val in enumerate(mod):
+                    if val in (b"name", "name") and i + 1 < len(mod):
+                        names.add(mod[i + 1])
+        decoded = {n.decode() if isinstance(n, bytes) else n for n in names if n}
+        return True, "search" in decoded
+    except Exception:
+        return True, False
+
+
+def _doctor_redis(ws, mark) -> None:
+    from citadel.paths import resolve_redis_url
+
+    url = resolve_redis_url(ws)
+    if url is None:
+        print("  [ok] redis: disabled (pure-Python on-disk vector store)")
+        return
+    reachable, has_search = probe_redis(url)
+    print(f"  {mark(reachable)} redis reachable: {url}")
+    if reachable:
+        note = "native HNSW vectors" if has_search else "no RediSearch — on-disk fallback"
+        print(f"  {mark(has_search)} RediSearch module ({note})")
+    else:
+        print("       (unreachable — the retrieval layer uses the pure-Python on-disk store)")
+
+
+def _doctor_mcp(ws, mark) -> None:
+    import importlib.util
+    import json
+
+    print(f"  {mark(importlib.util.find_spec('mcp') is not None)} mcp SDK installed")
+    print(f"  {mark(shutil.which('docker') is not None)} docker CLI on PATH")
+    mcp_json = ws / ".mcp.json"
+    servers: list[str] = []
+    if mcp_json.exists():
+        try:
+            servers = list(json.loads(mcp_json.read_text(encoding="utf-8")).get("mcpServers", {}))
+        except (OSError, ValueError):
+            pass
+    print(f"  {mark(bool(servers))} .mcp.json servers: {', '.join(servers) or 'none'}")
 
 
 def run_doctor(args) -> int:
@@ -128,6 +206,9 @@ def run_doctor(args) -> int:
     print(f"  {mark(shutil.which('nvidia-smi') is not None)} GPU (nvidia-smi)")
 
     ws = Path(getattr(args, "workspace", None) or ".").resolve()
+    _doctor_redis(ws, mark)
+    _doctor_mcp(ws, mark)
+
     unsafe = is_unsafe_placement(ws / ".claude")
     print(f"  {mark(unsafe is None)} state placement (masterplan §11.2)" + ("" if unsafe is None else f": {unsafe}"))
     if getattr(args, "repair", False):

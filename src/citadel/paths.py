@@ -325,6 +325,52 @@ def workspace_config(ws: Path | None = None) -> dict:
     }
 
 
+_DEFAULT_REDIS_URL = "redis://127.0.0.1:6379"
+
+
+def resolve_redis_url(ws: Path | None = None, *, explicit: str | None = None) -> str | None:
+    """Resolve the Redis connection URL, or None to force the pure-Python fallback.
+
+    Precedence: explicit arg > CITADEL_REDIS_URL env > .citadel/config.toml [redis] > default localhost.
+    `[redis] enabled = false` returns None on purpose (opt out of Redis). Never raises — a missing workspace
+    or unparsable config falls through to the env/default, so the retrieval layer always has an answer.
+    """
+    if explicit:
+        return explicit
+    env = os.environ.get("CITADEL_REDIS_URL")
+    if env:
+        return env
+    try:
+        cfg = _load_config_toml(ws)
+    except Exception:
+        cfg = {}
+    redis_cfg = cfg.get("redis", {}) if isinstance(cfg, dict) else {}
+    if redis_cfg.get("enabled") is False:
+        return None
+    url = redis_cfg.get("url")
+    return url if url else _DEFAULT_REDIS_URL
+
+
+def set_redis_config(ws: Path | None = None, *, url: str | None = None, enabled: bool = True) -> Path:
+    """Write the `[redis]` section of .citadel/config.toml, preserving every other section (targeted text
+    edit — no TOML re-serialization, so existing config is never mangled). Returns the config path."""
+    import re
+
+    root = ws or workspace_root()
+    cfg_path = root / ".citadel" / "config.toml"
+    cfg_path.parent.mkdir(parents=True, exist_ok=True)
+    text = cfg_path.read_text(encoding="utf-8") if cfg_path.exists() else ""
+    block = "[redis]\nenabled = false\n" if enabled is False else (
+        "[redis]\nenabled = true\n" + (f'url = "{url}"\n' if url else "")
+    )
+    section = re.compile(r"(?ms)^\[redis\][ \t]*\n(?:(?!^\[).*\n?)*")
+    text = section.sub(block, text) if section.search(text) else (
+        (text.rstrip() + "\n\n" if text.strip() else "") + block
+    )
+    cfg_path.write_text(text, encoding="utf-8")
+    return cfg_path
+
+
 def state_dir(ws: Path | None = None) -> Path:
     """Return <workspace>/.citadel (or CITADEL_STATE_DIR override)."""
     env = os.environ.get("CITADEL_STATE_DIR")

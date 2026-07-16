@@ -15,14 +15,36 @@ legion_shell.py's default-deny gate).
 """
 
 import json
+import os
 import sys
+from pathlib import Path
 
 import legion_shell
 import prompt_usage_miner
 from _brain_common import ROOT, STATE, load_json
 
+_SRC = Path(__file__).resolve().parent.parent / "src"
+if _SRC.is_dir() and str(_SRC) not in sys.path:
+    sys.path.insert(0, str(_SRC))
+
 PROTOCOL_VERSION = "2024-11-05"
 SERVER_INFO = {"name": "sovereign-imperia-citadel", "version": "1.0.0"}
+
+_retrieval_service = None
+
+
+def _retrieval():
+    """Lazily build the zero-token retrieval service against the active workspace (degrade to None)."""
+    global _retrieval_service
+    if _retrieval_service is None:
+        try:
+            from citadel.services.retrieval.service import RetrievalService
+
+            ws = os.environ.get("CITADEL_WORKSPACE", str(ROOT))
+            _retrieval_service = RetrievalService.for_workspace(ws)
+        except Exception:
+            _retrieval_service = False
+    return _retrieval_service or None
 
 
 def _t_prompt_usage(args: dict) -> dict:
@@ -81,6 +103,27 @@ def _t_shell(args: dict) -> dict:
     return legion_shell.run(cmd)
 
 
+def _t_search(args: dict) -> dict:
+    svc = _retrieval()
+    if svc is None:
+        return {"error": "retrieval service unavailable", "hits": [], "count": 0}
+    return svc.search(args.get("query", ""), top_k=int(args.get("top_k", 8)))
+
+
+def _t_read(args: dict) -> dict:
+    svc = _retrieval()
+    if svc is None:
+        return {"error": "retrieval service unavailable"}
+    return svc.read(args.get("path", ""), max_bytes=int(args.get("max_bytes", 16 * 1024)))
+
+
+def _t_context(args: dict) -> dict:
+    svc = _retrieval()
+    if svc is None:
+        return {"error": "retrieval service unavailable", "chunks": []}
+    return svc.context(args.get("task", ""), top_k=int(args.get("top_k", 8)))
+
+
 TOOLS = [
     {"name": "legion_prompt_usage_lookup",
      "description": "Learned prompt->context bundle (intent/unit/labels) for a prompt, or miss.",
@@ -113,6 +156,27 @@ TOOLS = [
                      "properties": {"command": {"type": "array", "items": {"type": "string"}}},
                      "required": ["command"]},
      "handler": _t_shell},
+    {"name": "citadel_search",
+     "description": "Zero-token semantic (dense) code search over the local vector index. Returns cited "
+                    "chunks (path + byte range + snippet). Costs no model tokens — the search runs locally.",
+     "inputSchema": {"type": "object",
+                     "properties": {"query": {"type": "string"}, "top_k": {"type": "integer"}},
+                     "required": ["query"]},
+     "handler": _t_search},
+    {"name": "citadel_read",
+     "description": "Read a workspace file, secret-redacted + byte-spliced + count-first (never dumps a whole "
+                    "large file). Path is workspace-scoped. Zero model tokens.",
+     "inputSchema": {"type": "object",
+                     "properties": {"path": {"type": "string"}, "max_bytes": {"type": "integer"}},
+                     "required": ["path"]},
+     "handler": _t_read},
+    {"name": "citadel_context",
+     "description": "Assemble a budgeted, deduped, cited context capsule for a task (pre-digested pack). "
+                    "Zero model tokens — retrieval + assembly happen locally.",
+     "inputSchema": {"type": "object",
+                     "properties": {"task": {"type": "string"}, "top_k": {"type": "integer"}},
+                     "required": ["task"]},
+     "handler": _t_context},
 ]
 _BY_NAME = {t["name"]: t for t in TOOLS}
 
