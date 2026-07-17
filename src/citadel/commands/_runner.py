@@ -10,6 +10,21 @@ import sys
 from pathlib import Path
 
 
+def _child_env(ws: Path) -> dict:
+    """Environment for spawned tools/daemons: the workspace pointer + forced UTF-8.
+
+    Child processes do NOT inherit the parent's `sys.stdout.reconfigure(utf-8)` from `cli.main()`, and on
+    Windows a subprocess defaults to the legacy cp1252 codepage — so a tool that prints a ✓/✗/● icon dies
+    with UnicodeEncodeError. `PYTHONUTF8=1` (+ `PYTHONIOENCODING`) makes every child emit UTF-8, whether its
+    stdout is a console, a pipe, or a log file."""
+    return {
+        **os.environ,
+        "CITADEL_WORKSPACE": str(ws),
+        "PYTHONUTF8": "1",
+        "PYTHONIOENCODING": "utf-8",
+    }
+
+
 def _tools_dir() -> Path:
     """Return the directory containing bundled sovereign-imperia-citadel tools.
 
@@ -61,7 +76,7 @@ def run_tool(
         print(f"  [warn] bundled tool not found: tools/{name}", file=sys.stderr)
         return False
 
-    env = {**os.environ, "CITADEL_WORKSPACE": str(ws)}
+    env = _child_env(ws)
     cmd = [sys.executable, str(tool)] + (extra_args or [])
     try:
         result = subprocess.run(
@@ -164,7 +179,7 @@ def start_daemon(
     out_path.parent.mkdir(parents=True, exist_ok=True)
     err_path.parent.mkdir(parents=True, exist_ok=True)
 
-    env = {**os.environ, "CITADEL_WORKSPACE": str(ws)}
+    env = _child_env(ws)
     cmd = [sys.executable, str(tool), *daemon_args]
 
     try:
