@@ -28,18 +28,29 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote_plus, urlsplit
 
-ROOT = Path(os.environ.get("CITADEL_WORKSPACE") or Path(__file__).resolve().parents[1])
+_SCRIPT_PATH = Path(os.path.abspath(__file__))
+ROOT = Path(os.environ.get("CITADEL_WORKSPACE") or _SCRIPT_PATH.parents[1])
 DOCS_DIR = ROOT / "docs"
 
-_TOOLS_DIR = str(Path(__file__).resolve().parent)
+_TOOLS_DIR = str(_SCRIPT_PATH.parent)
 if _TOOLS_DIR not in sys.path:
     sys.path.insert(0, _TOOLS_DIR)
+
+_CLAUDE_DIR = ROOT / ".citadel" / ".claude"
+
+
+def _workspace_path(relative: str | Path) -> Path:
+    """Join a workspace path without traversing the root ``.claude`` junction."""
+    rel = Path(relative)
+    if not rel.is_absolute() and rel.parts[:1] == (".claude",):
+        return _CLAUDE_DIR.joinpath(*rel.parts[1:])
+    return ROOT / rel
 
 HOST = "127.0.0.1"
 PORT = int(os.environ.get("CITADEL_UI_PORT", "8765"))
 MAX_REQUEST_BODY = 64 * 1024
 
-CONFIG_PATH = ROOT / ".claude" / "brain" / "citadel-ask-config.json"
+CONFIG_PATH = _CLAUDE_DIR / "brain" / "citadel-ask-config.json"
 
 try:
     from intent_classifier import (
@@ -161,7 +172,7 @@ def load_allowed(relpath: str, cfg: dict) -> dict | list | None:
     allowed: list[str] = cfg.get("allowed_context_files", [])
     if relpath not in allowed:
         return None
-    return cached_json(str(ROOT / relpath))
+    return cached_json(str(_workspace_path(relpath)))
 
 
 def check_blocked(question: str, cfg: dict) -> bool:
@@ -238,13 +249,13 @@ def build_graph_cache(cfg: dict) -> dict:  # noqa: ARG001
 def build_workspace_index_cache(cfg: dict) -> dict:  # noqa: ARG001
     """Load workspace intelligence summary indexes; recompute only on mtime change."""
     global _ws_cache, _ws_mtime
-    ws_meta_path = str(ROOT / ".claude" / "state" / "workspace-intelligence" / "build-metadata.json")
+    ws_meta_path = str(_CLAUDE_DIR / "state" / "workspace-intelligence" / "build-metadata.json")
     mtime = file_mtime(ws_meta_path)
     if mtime is not None and mtime == _ws_mtime and _ws_cache:
         return _ws_cache
 
     def _load(relpath: str):
-        return cached_json(str(ROOT / relpath))
+        return cached_json(str(_workspace_path(relpath)))
 
     bm = _load(".claude/state/workspace-intelligence/build-metadata.json") or {}
     ws = _load(".claude/state/workspace-intelligence/workspace-index.json") or {}
@@ -1325,7 +1336,7 @@ def answer_dependency_ws(question: str, cfg: dict) -> dict:  # noqa: ARG001
 
 def answer_skills(question: str, cfg: dict) -> dict:
     """Answer skill count/list questions from .claude/skills/ directory."""
-    skills_dir = ROOT / ".claude" / "skills"
+    skills_dir = _CLAUDE_DIR / "skills"
     q = question.lower()
 
     if not skills_dir.exists():
@@ -1360,7 +1371,7 @@ def answer_skills(question: str, cfg: dict) -> dict:
 
 def answer_agents(question: str, cfg: dict) -> dict:
     """Answer agent count/list questions from .claude/agents/ directory."""
-    agents_dir = ROOT / ".claude" / "agents"
+    agents_dir = _CLAUDE_DIR / "agents"
     q = question.lower()
 
     if not agents_dir.exists():
@@ -1394,7 +1405,7 @@ def answer_agents(question: str, cfg: dict) -> dict:
 
 def answer_workflows(question: str, cfg: dict) -> dict:
     """Answer workflow count/list questions from workflow-manifest-config.json."""
-    manifest_path = ROOT / ".claude" / "brain" / "workflow-manifest-config.json"
+    manifest_path = _CLAUDE_DIR / "brain" / "workflow-manifest-config.json"
     q = question.lower()
 
     if not manifest_path.exists():
@@ -1847,7 +1858,7 @@ def handle_api_workspace(path: str, query_str: str, cfg: dict) -> tuple[int, dic
 
 
 _TASK_ID_RE = re.compile(r"^[0-9a-f]{12}$")
-_AUDIT_LOG_PATH = ROOT / ".claude" / "state" / "ai-provider-audit.log"
+_AUDIT_LOG_PATH = _CLAUDE_DIR / "state" / "ai-provider-audit.log"
 
 
 def _validate_task_id(tid: str) -> bool:
@@ -2433,7 +2444,7 @@ class CitadelHandler(SimpleHTTPRequestHandler):
         """
         POLL_SECS = 0.5
         HEARTBEAT_SECS = 15.0
-        ledger = ROOT / ".claude" / "state" / "telemetry-events.ndjson"
+        ledger = _CLAUDE_DIR / "state" / "telemetry-events.ndjson"
 
         self._begin_sse()
         if not self._sse_send({"status": "connected"}, event="ready"):
@@ -2549,7 +2560,7 @@ def main() -> None:
     server.allow_reuse_address = True
     server.daemon_threads = True
 
-    _pidfile = ROOT / ".claude" / "state" / "citadel-ui-server.pid"
+    _pidfile = _CLAUDE_DIR / "state" / "citadel-ui-server.pid"
     try:
         _pidfile.parent.mkdir(parents=True, exist_ok=True)
         _pidfile.write_text(str(os.getpid()))

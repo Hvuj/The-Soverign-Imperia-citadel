@@ -82,7 +82,9 @@
       "Bash(uv run *)",
       "Bash(citadel up *)",
       "Bash(uv pip *)",
-      "Bash(PYTHONPATH=src python -m citadel.cli consensus \"write a python function add\\(a, b\\) that returns their sum\" --code)"
+      "Bash(PYTHONPATH=src python -m citadel.cli consensus \"write a python function add\\(a, b\\) that returns their sum\" --code)",
+      "Bash(uv sync *)",
+      "Bash(.venv/Scripts/python.exe -c \"from citadel.commands._runner import _tools_dir; import time; t=time.perf_counter\\(\\); d=_tools_dir\\(\\); print\\('tools:', d, d.is_dir\\(\\), f'{\\(time.perf_counter\\(\\)-t\\)*1000:.2f}ms'\\)\")"
     ],
     "additionalDirectories": [
       "c:\\Users\\Hvuj\\.claude\\projects\\c--Users-Hvuj-OneDrive-Desktop-VIREN\\memory"

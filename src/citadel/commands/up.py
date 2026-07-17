@@ -380,12 +380,15 @@ def _start_ui_server(ws: Path) -> str | None:
         pidfile_rel=".claude/state/citadel-ui-server.pid",
         out_rel=".claude/state/citadel-ui-server.out.log",
         err_rel=".claude/state/citadel-ui-server.err.log",
+        check_tool=False,
     )
     port = _ui_port()
     url = f"http://localhost:{port}/brain/graph.html"
-    if pid:
-        _wait_for_port("127.0.0.1", port, timeout=3.0)
+    if pid and _wait_for_port("127.0.0.1", port, timeout=3.0):
         status = f"pid={pid} url={url}"
+    elif pid:
+        status = f"pid={pid} NOT READY (optional; continuing)"
+        url = None
     else:
         status = "FAILED (optional)"
         url = None

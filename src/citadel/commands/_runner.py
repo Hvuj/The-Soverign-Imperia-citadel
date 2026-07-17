@@ -4,6 +4,7 @@ All paths are resolved relative to the installed sovereign-imperia-citadel packa
 these helpers work from ANY workspace after `citadel init`.
 """
 
+import contextlib
 import functools
 import os
 import subprocess
@@ -150,10 +151,29 @@ def _low_priority_spawn_kwargs() -> dict:
 def _lower_priority(pid: int) -> None:
     """Nice a spawned daemon down on POSIX so background work never starves the foreground."""
     if sys.platform != "win32" and hasattr(os, "setpriority"):
-        try:
+        with contextlib.suppress(OSError, PermissionError):
             os.setpriority(os.PRIO_PROCESS, pid, 10)
-        except (OSError, PermissionError):
-            pass
+
+
+def _daemon_path(ws: Path, relative: str) -> Path:
+    """Return a daemon pid/log path without traversing the root ``.claude`` link.
+
+    New installations keep the real Claude directory at
+    ``.citadel/.claude`` and expose root ``.claude`` as a symlink (POSIX) or
+    junction (Windows).  Writing daemon state through the Windows junction can
+    block under OneDrive and has caused ``citadel up`` to hang while starting
+    the UI server.  Initialized workspaces always have the managed directory,
+    so map it lexically without an ``exists()``/``is_dir()`` probe on the hot
+    startup path.
+
+    This is intentionally a lexical mapping: resolving either path would walk
+    the junction and reintroduce the problem this helper avoids.
+    """
+    rel = Path(relative)
+    parts = rel.parts
+    if not rel.is_absolute() and parts[:1] == (".claude",):
+        return (ws / ".citadel" / ".claude").joinpath(*parts[1:])
+    return ws / rel
 
 
 def start_daemon(
@@ -163,21 +183,31 @@ def start_daemon(
     pidfile_rel: str,
     out_rel: str,
     err_rel: str,
+    *,
+    check_tool: bool = True,
 ) -> int | None:
     """Start a daemon tool in a detached subprocess if not already running.
 
     Returns the PID of the (new or existing) daemon, or None on failure.
     - Idempotent: if the pidfile exists and the process is alive, returns its PID.
-    - State files are written to ``<ws>/<pidfile_rel>`` etc.
+    - State files are written to the initialized workspace's managed
+      ``.citadel/.claude`` directory, bypassing the root symlink/junction.
+    - ``check_tool=False`` skips a redundant pre-spawn stat for callers that
+      must avoid OneDrive placeholder stalls; ``Popen`` still reports a missing
+      script through the daemon log/process exit.
     - Missing optional deps (watchdog, anthropic) → warning, not an error.
     """
     tool = _tools_dir() / tool_name
-    if not tool.exists():
+    if check_tool and not tool.exists():
         print(f"  [warn] daemon tool not found: tools/{tool_name}", file=sys.stderr)
         return None
 
-    pidfile = ws / pidfile_rel
-    pidfile.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        pidfile = _daemon_path(ws, pidfile_rel)
+        pidfile.parent.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        print(f"  [warn] {tool_name} state path unavailable: {exc}", file=sys.stderr)
+        return None
 
     if pidfile.exists():
         try:
@@ -185,13 +215,17 @@ def start_daemon(
             os.kill(existing_pid, 0)
             if _pid_is_our_daemon(existing_pid, tool_name):
                 return existing_pid
-        except (ValueError, ProcessLookupError, PermissionError):
+        except (ValueError, OSError):
             pass
 
-    out_path = ws / out_rel
-    err_path = ws / err_rel
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    err_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        out_path = _daemon_path(ws, out_rel)
+        err_path = _daemon_path(ws, err_rel)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        err_path.parent.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        print(f"  [warn] {tool_name} log path unavailable: {exc}", file=sys.stderr)
+        return None
 
     env = _child_env(ws)
     cmd = [sys.executable, str(tool), *daemon_args]
@@ -220,12 +254,12 @@ def start_daemon(
 
 def daemon_alive(pidfile_rel: str, ws: Path) -> bool:
     """Return True if the daemon described by ``pidfile_rel`` is running."""
-    pidfile = ws / pidfile_rel
+    pidfile = _daemon_path(ws, pidfile_rel)
     if not pidfile.exists():
         return False
     try:
         pid = int(pidfile.read_text().strip())
         os.kill(pid, 0)
         return True
-    except (ValueError, ProcessLookupError, PermissionError):
+    except (ValueError, OSError):
         return False
