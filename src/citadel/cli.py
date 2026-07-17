@@ -119,6 +119,22 @@ def _cmd_senate(args: argparse.Namespace) -> int:
     return run(getattr(args, "workspace", None), as_json=getattr(args, "as_json", False))
 
 
+def _cmd_bi(args: argparse.Namespace) -> int:
+    from citadel.commands.bi import run
+    return run(
+        args.bi_action,
+        getattr(args, "workspace", None),
+        province=getattr(args, "province", None),
+        name=getattr(args, "name", None),
+        as_json=getattr(args, "as_json", False),
+    )
+
+
+def _cmd_pandidakterion(args: argparse.Namespace) -> int:
+    from citadel.commands.pandidakterion import run
+    return run(getattr(args, "workspace", None), as_json=getattr(args, "as_json", False))
+
+
 def _cmd_brain(args: argparse.Namespace) -> int:
     """Rebuild the brain search index."""
     import os
@@ -690,6 +706,19 @@ def _build_parser() -> argparse.ArgumentParser:
     p_senate.add_argument("--workspace", default=None, help="Workspace path (default: current directory)")
     p_senate.add_argument("--json", dest="as_json", action="store_true", help="Emit JSON")
     p_senate.set_defaults(func=_cmd_senate)
+
+    p_bi = sub.add_parser("bi", help="Agnostic domain-logic learning (Cartographer): learn · status · show")
+    p_bi.add_argument("bi_action", choices=["learn", "status", "show"], help="what to do")
+    p_bi.add_argument("name", nargs="?", default=None, help="unit name (for `show`)")
+    p_bi.add_argument("--workspace", default=None, help="Workspace path (default: current directory)")
+    p_bi.add_argument("--province", default=None, help="Province (default: workspace name)")
+    p_bi.add_argument("--json", dest="as_json", action="store_true", help="Emit JSON")
+    p_bi.set_defaults(func=_cmd_bi)
+
+    p_pand = sub.add_parser("pandidakterion", help="Status of the university governing learned domain logic")
+    p_pand.add_argument("--workspace", default=None, help="Workspace path (default: current directory)")
+    p_pand.add_argument("--json", dest="as_json", action="store_true", help="Emit JSON")
+    p_pand.set_defaults(func=_cmd_pandidakterion)
 
     p_doctor = sub.add_parser("doctor", help="Report what is installed / missing / how to fix")
     p_doctor.add_argument("--model", default=None, help="Local model to check for (default: qwen2.5-coder:7b)")

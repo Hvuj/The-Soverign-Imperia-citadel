@@ -1,0 +1,65 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "domain-understanding.schema.json",
+  "title": "Domain Understanding",
+  "description": "A province's agnostically-learned domain logic: confidence-scored units with provenance. Emitted by the Cartographer (Pandidakterion). No domain-specific vocabulary is fixed here; units are learned per-province.",
+  "type": "object",
+  "required": ["province", "units", "scorecard"],
+  "additionalProperties": true,
+  "properties": {
+    "province": {
+      "type": "string",
+      "description": "The province (repo/workspace) these units were learned from."
+    },
+    "units": {
+      "type": "array",
+      "description": "The learned domain-logic units, most-confident first.",
+      "items": { "$ref": "#/$defs/unit" }
+    },
+    "vocab": {
+      "type": "object",
+      "description": "The learned per-province vocabulary (frequency-ranked domain terms)."
+    },
+    "scorecard": {
+      "type": "object",
+      "description": "Self-awareness summary: how much is known and how well.",
+      "required": ["units", "avg_confidence"],
+      "properties": {
+        "units": { "type": "integer", "minimum": 0 },
+        "confident_units": { "type": "integer", "minimum": 0 },
+        "avg_confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+        "by_kind": { "type": "object" }
+      }
+    }
+  },
+  "$defs": {
+    "unit": {
+      "type": "object",
+      "required": ["name", "kind", "confidence"],
+      "additionalProperties": true,
+      "properties": {
+        "name": { "type": "string" },
+        "kind": {
+          "type": "string",
+          "enum": ["metric", "rule", "transform", "policy", "term"]
+        },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+        "content_hash": { "type": "string" },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["source_path"],
+            "properties": {
+              "source_path": { "type": "string" },
+              "line": { "type": "integer", "minimum": 0 },
+              "kind": { "type": "string" },
+              "weight": { "type": "number" },
+              "snippet": { "type": "string" }
+            }
+          }
+        }
+      }
+    }
+  }
+}

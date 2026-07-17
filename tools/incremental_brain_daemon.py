@@ -55,6 +55,19 @@ def sync(paths):
         except Exception:
             subprocess.run([sys.executable,"tools/build_brain_search_index.py","--quiet"],cwd=ROOT)
     event({"event":"sync","changed":paths[:100],"full_rebuild":bool(structural)})
+    _logic_cascade(paths)
+
+
+def _logic_cascade(paths):
+    """Guarded: if a domain-logic file changed, re-learn/regenerate/re-wire it (Pandidakterion cascade)."""
+    try:
+        from bi_cascade import cascade
+        report = cascade(ROOT, paths)
+        if report.get("triggered"):
+            event({"event": "logic-cascade", "province": report.get("province"),
+                   "changed": report.get("changed"), "recorded_units": report.get("recorded_units")})
+    except Exception:
+        pass
 
 
 def once():
