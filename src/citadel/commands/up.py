@@ -453,7 +453,8 @@ def run(
 ) -> int:
     """Run `citadel up`. Returns exit code (0 = success)."""
 
-    ws = Path(workspace).expanduser().resolve() if workspace else resolve_home()
+    # abspath, not .resolve()/realpath: the latter walks OneDrive reparse points and can stall (see _runner)
+    ws = Path(os.path.abspath(Path(workspace).expanduser())) if workspace else resolve_home()
 
     if not ws.exists():
         print(f"ERROR: workspace '{ws}' does not exist.", file=sys.stderr)

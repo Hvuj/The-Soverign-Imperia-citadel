@@ -4,10 +4,21 @@ All paths are resolved relative to the installed sovereign-imperia-citadel packa
 these helpers work from ANY workspace after `citadel init`.
 """
 
+import functools
 import os
 import subprocess
 import sys
 from pathlib import Path
+
+
+def _package_root() -> Path:
+    """This file's absolute path WITHOUT `os.path.realpath`.
+
+    `Path(__file__).resolve()` walks and resolves every path component (reparse points / OneDrive cloud
+    placeholders), which can BLOCK indefinitely when the tree lives under a OneDrive-redirected folder. We
+    only need the package directory to locate bundled `tools/`/`scripts/`, not symlink resolution — so use
+    the pure-string `os.path.abspath` (never touches the filesystem)."""
+    return Path(os.path.abspath(__file__))
 
 
 def _child_env(ws: Path) -> dict:
@@ -25,12 +36,14 @@ def _child_env(ws: Path) -> dict:
     }
 
 
+@functools.cache
 def _tools_dir() -> Path:
     """Return the directory containing bundled sovereign-imperia-citadel tools.
 
     Works for both wheel installs (tools at citadel/tools/) and editable/src
     installs (tools at <repo>/tools/). Callers use warn-and-continue semantics for
-    missing individual tools, so returning a non-existent path is acceptable.
+    missing individual tools, so returning a non-existent path is acceptable. Cached: the answer is constant
+    for the process, so the filesystem is probed once, not on every daemon/tool spawn.
 
     Layout mapping:
       Wheel:    <site-packages>/citadel/commands/_runner.py
@@ -38,7 +51,7 @@ def _tools_dir() -> Path:
       Editable: <repo>/src/citadel/commands/_runner.py
                 parents[3] = <repo>/                          ← has tools/ here
     """
-    here = Path(__file__).resolve()
+    here = _package_root()
     for cand in (here.parents[1], here.parents[3]):
         td = cand / "tools"
         if td.is_dir():
@@ -46,12 +59,13 @@ def _tools_dir() -> Path:
     return here.parents[1] / "tools"
 
 
+@functools.cache
 def _scripts_dir() -> Path:
     """Return the directory containing bundled sovereign-imperia-citadel scripts.
 
-    Same wheel/editable resolution as `_tools_dir()`, for `scripts/`.
+    Same wheel/editable resolution as `_tools_dir()`, for `scripts/`. Cached (constant per process).
     """
-    here = Path(__file__).resolve()
+    here = _package_root()
     for cand in (here.parents[1], here.parents[3]):
         sd = cand / "scripts"
         if sd.is_dir():
