@@ -12,14 +12,23 @@ from dataclasses import dataclass
 class Gate:
     family: str
     passed: bool
+    identity: str = ""  # finer not-self key (model_id[#effort]); falls back to family when empty
+
+
+def _key(gate: "Gate") -> str:
+    return gate.identity or gate.family
 
 
 def dual_gate(gates: Iterable[Gate]) -> tuple[bool, str]:
-    """Approve only when >=2 PASS verdicts come from DIFFERENT families (D4). Returns (approved, reason)."""
-    passing_families = {gate.family for gate in gates if gate.passed}
-    if len(passing_families) >= 2:
-        return True, f"approved by uncorrelated families {sorted(passing_families)}"
-    if len(passing_families) == 1:
-        family = next(iter(passing_families))
-        return False, f"only one family passed ({family}); an uncorrelated 2nd gate is required (D4)"
+    """Approve only when >=2 PASS verdicts come from DISTINCT, uncorrelated validators (D4).
+
+    Distinctness keys on the gate's `identity` when set (so same-family/different-config counts as two
+    independent validators — e.g. opus-4.8-low vs opus-4.8-medium), else on `family`. Two identical
+    validators, or a single one, never approve — no model can wave its own axe-class act through."""
+    passing = {_key(g) for g in gates if g.passed}
+    if len(passing) >= 2:
+        return True, f"approved by {len(passing)} uncorrelated validators {sorted(passing)}"
+    if len(passing) == 1:
+        return False, (f"only one validator passed ({next(iter(passing))}); "
+                       "a distinct 2nd, uncorrelated validator is required (D4)")
     return False, "no passing gate"

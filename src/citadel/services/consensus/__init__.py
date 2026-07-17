@@ -15,12 +15,22 @@ from citadel.services.consensus.engine import (
     ModelJudge,
     family_of,
 )
+from citadel.services.consensus.identity import (
+    ModelIdentity,
+    can_validate,
+    distinct_witnesses,
+    identity_of,
+)
 
 __all__ = [
     "Candidate",
     "ConsensusEngine",
     "ConsensusResult",
     "Critique",
+    "ModelIdentity",
     "ModelJudge",
+    "can_validate",
+    "distinct_witnesses",
     "family_of",
+    "identity_of",
 ]

@@ -13,6 +13,7 @@ from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 
+from citadel.services.consensus.identity import distinct_witnesses, identity_of
 from citadel.services.execute.blueprint import Blueprint
 from citadel.services.execute.executor import Executor
 
@@ -142,8 +143,11 @@ class ConsensusEngine:
             return list(pool.map(judge, pairs))
 
     def _aggregate(self, candidates: list[Candidate], critiques: list[Critique]):
+        """Return (consensus scores, distinct-witness sets). A witness is an accepting validator whose model
+        IDENTITY differs from the candidate's author (the not-self rule) — deduped, so two identical
+        validators count once and a self-review counts zero."""
         scores: dict[str, float] = {}
-        families: dict[str, set[str]] = {}
+        witnesses: dict[str, set[tuple[str, str]]] = {}
         for c in candidates:
             cc = [x for x in critiques if x.candidate_id == c.id]
             if cc:
@@ -151,8 +155,10 @@ class ConsensusEngine:
                 scores[c.id] = sum(x.score * self.weights.get(x.family, 1.0) for x in cc) / (total_w or 1.0)
             else:
                 scores[c.id] = 0.0
-            families[c.id] = {x.family for x in cc if x.verdict == "accept"}
-        return scores, families
+            author = identity_of(c.member)
+            accepting = [identity_of(x.validator) for x in cc if x.verdict == "accept"]
+            witnesses[c.id] = distinct_witnesses(author, accepting)
+        return scores, witnesses
 
     def _verify(self, output: str) -> tuple[bool, str]:
         return self.verify(output) if self.verify else (True, "no verifier")
@@ -173,15 +179,17 @@ class ConsensusEngine:
 
     # ── DECIDE ──────────────────────────────────────────────────────────────────────
     def run(self, blueprint: Blueprint, *, min_families: int = 2, min_score: float = 0.5) -> ConsensusResult:
+        # `min_families` = the minimum number of DISTINCT non-self validator identities that must accept
+        # (the not-self quorum). The name is kept for callers; the semantics are identity-based now.
         candidates = self._generate(blueprint)
         critiques = self._crossvalidate(blueprint.instruction, candidates)
-        scores, families = self._aggregate(candidates, critiques)
+        scores, witnesses = self._aggregate(candidates, critiques)
 
         eligible = [
             c for c in candidates
             if self._verify(c.output)[0]
             and scores.get(c.id, 0.0) >= min_score
-            and len(families.get(c.id, set())) >= min_families
+            and len(witnesses.get(c.id, set())) >= min_families
         ]
         if eligible:
             winner = max(eligible, key=lambda c: scores[c.id])

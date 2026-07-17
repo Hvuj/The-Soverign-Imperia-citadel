@@ -72,7 +72,15 @@
       "PowerShell($env:PYTHONPATH='src'; $env:CITADEL_REDIS_URL=$null; $env:CITADEL_WORKSPACE=$null; $env:GROK_API_KEY=$null; $env:NVIDIA_API_KEY=$null; python -m pytest -q -p no:cacheprovider --continue-on-collection-errors -n auto --dist loadscope 2>&1 | Select-Object -Last 8)",
       "PowerShell($env:PYTHONPATH='src'; python -m pytest tests/test_provider_p4.py -q -p no:cacheprovider --continue-on-collection-errors -o addopts=\"-ra\")",
       "PowerShell($env:PYTHONPATH='src'; $env:GROK_API_KEY=$null; $env:NVIDIA_API_KEY=$null; python -m pytest tests/test_provider_vision_image.py -q -p no:cacheprovider --continue-on-collection-errors -o addopts=\"-ra\")",
-      "PowerShell($env:PYTHONPATH='src'; $env:GROK_API_KEY=$null; $env:NVIDIA_API_KEY=$null; python -m pytest tests/test_consensus_cmd.py -q -p no:cacheprovider --continue-on-collection-errors)"
+      "PowerShell($env:PYTHONPATH='src'; $env:GROK_API_KEY=$null; $env:NVIDIA_API_KEY=$null; python -m pytest tests/test_consensus_cmd.py -q -p no:cacheprovider --continue-on-collection-errors)",
+      "Bash(uv --version)",
+      "Bash(ollama --version)",
+      "Bash(command -v citadel)",
+      "Bash(git -C \"c:/Users/Hvuj/OneDrive/Desktop/VIREN\" rev-parse --abbrev-ref HEAD)",
+      "Bash(docker --version)",
+      "PowerShell(Write-Output \"=== uv.toml \\(project\\) ===\"; if \\(Test-Path uv.toml\\) { Get-Content uv.toml } else { Write-Output \"\\(none\\)\" }; Write-Output \"=== global uv config ===\"; $g = Join-Path $env:APPDATA \"uv\\\\uv.toml\"; if \\(Test-Path $g\\) { Get-Content $g } else { Write-Output \"\\(none at $g\\)\" }; Write-Output \"=== uv version ===\"; uv --version)",
+      "Bash(uv run *)",
+      "Bash(citadel up *)"
     ],
     "additionalDirectories": [
       "c:\\Users\\Hvuj\\.claude\\projects\\c--Users-Hvuj-OneDrive-Desktop-VIREN\\memory"

@@ -47,7 +47,9 @@ def _write_config_toml(ws: Path, branch: str = "main", *, exclude_globs: list[st
     branches = [branch, *[b for b in default_branches if b != branch]]
     branches_toml = ", ".join(f'"{b}"' for b in branches)
     cfg.write_text(
-        f'[workspace]\nroot = "{ws}"\n\n'
+        # as_posix(): a Windows path in a double-quoted TOML string would make tomllib
+        # read backslash sequences (e.g. C:\Users → \U) as escapes and fail to parse.
+        f'[workspace]\nroot = "{ws.as_posix()}"\n\n'
         f'[index]\nrepo_include_globs = ["*"]\nrepo_exclude_globs = [{excludes_toml}]\n\n'
         f'[git]\nbranch = "{branch}"\nbranches = [{branches_toml}]\n'
     )
