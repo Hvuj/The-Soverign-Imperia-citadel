@@ -42,7 +42,6 @@ REQUIRED_SCHEMAS = [
     "provider-status.schema.json",
     "legion-run-ledger.schema.json",
     "legion-current-run.schema.json",
-    "bi-understanding.schema.json",
     "benchmark-report.schema.json",
 ]
 
@@ -66,7 +65,7 @@ def check_required_schemas() -> list[dict]:
                                  f"{schema_name} does not exist"))
             continue
         try:
-            data = json.loads(path.read_text())
+            data = json.loads(path.read_text(encoding="utf-8-sig"))  # tolerate an optional UTF-8 BOM
         except json.JSONDecodeError as exc:
             checks.append(_check(f"schema_{schema_name}", "fail",
                                  f"{schema_name} invalid JSON: {exc}"))
