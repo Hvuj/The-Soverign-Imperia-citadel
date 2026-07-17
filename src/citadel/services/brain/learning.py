@@ -22,15 +22,16 @@ import threading
 import time
 from dataclasses import asdict, dataclass
 
-from citadel.services.brain.bus import EventBus, event_hash
 from citadel.paths import resolve_redis_url as _resolve_redis_url
+from citadel.services.brain.bus import EventBus, event_hash
 
 CATEGORIES = ("worked", "failed", "bug", "perf", "best_practice")
 _TOKEN = re.compile(r"[a-z0-9_]+")
 # a tiny function-word stoplist so trivial phrasing differences collapse to the same token set
-_STOP = frozenset(
-    "a an the of to in on for with and or is are be this that it its as at by from into we you i".split()
-)
+_STOP = frozenset({
+    "a", "an", "the", "of", "to", "in", "on", "for", "with", "and", "or", "is", "are",
+    "be", "this", "that", "it", "its", "as", "at", "by", "from", "into", "we", "you", "i",
+})
 _MINHASH_K = 16   # MinHash slots
 _LSH_ROWS = 2     # rows per band → 8 bands; a shared band ≈ Jaccard collision
 

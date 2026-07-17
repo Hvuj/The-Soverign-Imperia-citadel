@@ -14,6 +14,7 @@ Redis Streams give durability + multi-consumer semantics; with no Redis reachabl
 runs on a thread-safe in-memory log (degrade, never crash).
 """
 
+import contextlib
 import hashlib
 import json
 import threading
@@ -106,19 +107,19 @@ class EventBus:
     def subscribe(self, topic: str, group: str) -> None:
         """Ensure a consumer group exists, reading only events published after this point (Redis '$')."""
         if self._redis is not None:
-            try:
+            with contextlib.suppress(Exception):  # BUSYGROUP: already exists
                 self._redis.execute_command(
                     "XGROUP", "CREATE", self._stream_key(topic), group, "$", "MKSTREAM"
                 )
-            except Exception:
-                pass  # BUSYGROUP: already exists
             return
         with self._lock:
             self._groups.setdefault(
                 (topic, group), {"pos": len(self._log[topic]), "inflight": {}, "retry": deque()}
             )
 
-    def poll(self, topic: str, group: str, consumer: str, *, count: int = 1, block_ms: int = 100) -> list[tuple[str, dict]]:
+    def poll(
+        self, topic: str, group: str, consumer: str, *, count: int = 1, block_ms: int = 100
+    ) -> list[tuple[str, dict]]:
         """Pull up to `count` events for `consumer` in `group`; redeliveries (nacked events) come first."""
         if self._redis is not None:
             res = self._redis.execute_command(
@@ -129,7 +130,7 @@ class EventBus:
             if res:
                 _stream, entries = res[0]
                 for msg_id, fields in entries or []:
-                    pairs = fields.items() if isinstance(fields, dict) else zip(fields[::2], fields[1::2])
+                    pairs = fields.items() if isinstance(fields, dict) else zip(fields[::2], fields[1::2], strict=False)
                     data = {_dec(k): _dec(v) for k, v in pairs}
                     out.append((_dec(msg_id), json.loads(data.get("event", "{}"))))
             return out
@@ -143,7 +144,7 @@ class EventBus:
                 out = []
                 while g["retry"] and len(out) < count:                     # redeliver nacked first
                     mid = g["retry"].popleft()
-                    event, _h, fails = g["inflight"][mid]
+                    event, _h, _fails = g["inflight"][mid]
                     out.append((mid, dict(event)))
                 while g["pos"] < len(log) and len(out) < count:            # then new events
                     mid, event, h = log[g["pos"]]
@@ -191,7 +192,9 @@ class EventBus:
             g["retry"].append(msg_id)
             return False
 
-    def reclaim(self, topic: str, group: str, consumer: str, *, min_idle_ms: int = 0, count: int = 16) -> list[tuple[str, dict]]:
+    def reclaim(
+        self, topic: str, group: str, consumer: str, *, min_idle_ms: int = 0, count: int = 16
+    ) -> list[tuple[str, dict]]:
         """Redis-only: claim events left pending by a dead/slow consumer (XAUTOCLAIM). No-op in-mem
         (redelivery there is handled inline by `poll` draining the retry queue)."""
         if self._redis is None:
@@ -207,7 +210,7 @@ class EventBus:
         for msg_id, fields in entries or []:
             if not fields:
                 continue
-            pairs = fields.items() if isinstance(fields, dict) else zip(fields[::2], fields[1::2])
+            pairs = fields.items() if isinstance(fields, dict) else zip(fields[::2], fields[1::2], strict=False)
             data = {_dec(k): _dec(v) for k, v in pairs}
             out.append((_dec(msg_id), json.loads(data.get("event", "{}"))))
         return out

@@ -40,7 +40,8 @@ class LearningExecutor(Executor):
         self.store = store
         self.name = inner.name
         self._identity = identity_of(inner.name)
-        self._identity_key = f"{self._identity.model_id}#{self._identity.effort}" if self._identity.effort else self._identity.model_id
+        _id = self._identity
+        self._identity_key = f"{_id.model_id}#{_id.effort}" if _id.effort else _id.model_id
         self._lesson_of = lesson_of
         self._recall_limit = recall_limit
         self._inject = inject

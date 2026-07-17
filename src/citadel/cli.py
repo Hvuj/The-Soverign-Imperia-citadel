@@ -114,6 +114,11 @@ def _cmd_workers(args: argparse.Namespace) -> int:
     )
 
 
+def _cmd_senate(args: argparse.Namespace) -> int:
+    from citadel.commands.senate import run
+    return run(getattr(args, "workspace", None), as_json=getattr(args, "as_json", False))
+
+
 def _cmd_brain(args: argparse.Namespace) -> int:
     """Rebuild the brain search index."""
     import os
@@ -680,6 +685,11 @@ def _build_parser() -> argparse.ArgumentParser:
                        help="up = start the stack + write compose .mcp.json; pin = digest-pin reference images")
     p_mcp.add_argument("--workspace", default=None, help="Workspace path (default: current directory)")
     p_mcp.set_defaults(func=_cmd_mcp)
+
+    p_senate = sub.add_parser("senate", help="Status of the Republic (brain · imperia · learning · bus · senate)")
+    p_senate.add_argument("--workspace", default=None, help="Workspace path (default: current directory)")
+    p_senate.add_argument("--json", dest="as_json", action="store_true", help="Emit JSON")
+    p_senate.set_defaults(func=_cmd_senate)
 
     p_doctor = sub.add_parser("doctor", help="Report what is installed / missing / how to fix")
     p_doctor.add_argument("--model", default=None, help="Local model to check for (default: qwen2.5-coder:7b)")

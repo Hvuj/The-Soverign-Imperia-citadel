@@ -8,15 +8,19 @@ these interfaces; both degrade to a pure-Python/in-memory path with no Redis.
 
 from citadel.services.brain.access import BrainAccess
 from citadel.services.brain.bus import EventBus, event_hash
+from citadel.services.brain.injection import BrainContextExecutor, attach_brain, render_capsule
 from citadel.services.brain.learning import Learning, LearningStore, task_signature
 from citadel.services.brain.learning_executor import LearningExecutor
 
 __all__ = [
     "BrainAccess",
+    "BrainContextExecutor",
     "EventBus",
     "Learning",
     "LearningExecutor",
     "LearningStore",
+    "attach_brain",
     "event_hash",
+    "render_capsule",
     "task_signature",
 ]

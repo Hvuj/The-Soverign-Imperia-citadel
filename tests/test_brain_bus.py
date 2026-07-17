@@ -17,8 +17,8 @@ def test_publish_is_idempotent_by_content():
     bus = _bus()
     first = bus.publish("learn", {"kind": "worked", "summary": "cache-aside"})
     dup = bus.publish("learn", {"summary": "cache-aside", "kind": "worked"})  # same content, diff order
-    assert first == dup                      # no re-append — same id
-    assert bus.depth("learn") == 1           # only one event on the stream
+    assert first == dup             # no re-append — same id
+    assert bus.depth("learn") == 1  # only one event on the stream
 
 
 def test_consumer_group_poll_ack_roundtrip():
@@ -26,7 +26,9 @@ def test_consumer_group_poll_ack_roundtrip():
     bus.subscribe("learn", "senate")
     mid = bus.publish("learn", {"kind": "bug", "summary": "off-by-one"})
     got = bus.poll("learn", "senate", "c1", block_ms=0)
-    assert len(got) == 1 and got[0][0] == mid and got[0][1]["summary"] == "off-by-one"
+    assert len(got) == 1
+    assert got[0][0] == mid
+    assert got[0][1]["summary"] == "off-by-one"
     assert bus.pending("learn", "senate") == 1
     bus.ack("learn", "senate", mid)
     assert bus.pending("learn", "senate") == 0

@@ -12,7 +12,9 @@ from citadel.services.consensus.identity import (
 
 def test_identity_of_parses_names():
     g = identity_of("provider:groq:openai/gpt-oss-120b")
-    assert g.vendor == "groq" and g.family == "gpt-oss" and g.model_id == "openai/gpt-oss-120b"
+    assert g.vendor == "groq"
+    assert g.family == "gpt-oss"
+    assert g.model_id == "openai/gpt-oss-120b"
     assert identity_of("judge:provider:nvidia:meta/llama-3.3-70b").vendor == "nvidia"  # strips judge:
     assert identity_of("cloud-claude").vendor == "anthropic"
     assert identity_of("local-coding").vendor == "ollama"
@@ -21,7 +23,8 @@ def test_identity_of_parses_names():
 def test_effort_is_part_of_identity():
     low = identity_of("cloud-claude#low")
     med = identity_of("cloud-claude#medium")
-    assert low.effort == "low" and med.effort == "medium"
+    assert low.effort == "low"
+    assert med.effort == "medium"
     assert can_validate(low, med) is True  # same model, different effort → valid independent validator
 
 
@@ -35,7 +38,8 @@ def test_same_family_different_model_can_validate():
     sonnet5 = ModelIdentity("anthropic", "claude", "claude-sonnet-5")
     sonnet46 = ModelIdentity("anthropic", "claude", "claude-sonnet-4-6")
     haiku = ModelIdentity("anthropic", "claude", "claude-haiku")
-    assert can_validate(sonnet5, sonnet46) and can_validate(sonnet5, haiku)
+    assert can_validate(sonnet5, sonnet46)
+    assert can_validate(sonnet5, haiku)
 
 
 def test_distinct_witnesses_excludes_self_and_dedupes():
@@ -56,7 +60,8 @@ def test_dual_gate_identity_aware_same_family_diff_effort():
     assert approved is True
     # two IDENTICAL identities → not approved
     approved, reason = dual_gate([Gate("claude", True, "opus-4.8-low"), Gate("claude", True, "opus-4.8-low")])
-    assert approved is False and "distinct 2nd" in reason
+    assert approved is False
+    assert "distinct 2nd" in reason
 
 
 def test_dual_gate_backward_compatible_family_only():

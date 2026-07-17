@@ -25,7 +25,8 @@ def test_record_then_recall_roundtrip_o1():
     assert s.record("optimize the query planner", "groq:gpt-oss-120b", success=False,
                     category="bug", summary="planner OOMs on wide joins") is True
     got = s.recall("optimize the query planner")
-    assert len(got) == 1 and got[0]["summary"] == "planner OOMs on wide joins"
+    assert len(got) == 1
+    assert got[0]["summary"] == "planner OOMs on wide joins"
     assert got[0]["category"] == "bug"
 
 
@@ -33,7 +34,8 @@ def test_content_hash_dedup_holds():
     s = _store()
     first = s.record("t", "id-a", success=False, summary="same lesson")
     dup = s.record("t", "id-a", success=False, summary="same lesson")   # identical → deduped
-    assert first is True and dup is False
+    assert first is True
+    assert dup is False
     assert len(s.recall("t")) == 1
 
 
@@ -49,11 +51,13 @@ def test_ewma_success_rate_tracks_recent_outcomes():
     for _ in range(3):
         s.record("flaky task", "id", success=False)
     rate0, n0 = s.success_rate("flaky task")
-    assert rate0 == 0.0 and n0 == 3
+    assert rate0 == 0.0
+    assert n0 == 3
     for _ in range(3):
         s.record("flaky task", "id", success=True)
     rate1, n1 = s.success_rate("flaky task")
-    assert rate1 > 0.5 and n1 == 6                                       # recent passes pull the rate up
+    assert rate1 > 0.5             # recent passes pull the rate up
+    assert n1 == 6
 
 
 def test_time_decay_retires_stale_lessons():
@@ -96,4 +100,5 @@ def test_decorator_publishes_learn_events_on_the_bus():
     bus.subscribe("learn", "sink")
     LearningExecutor(_StubExecutor("provider:groq:x", "pass"), s).execute(Blueprint(task_id="t", instruction="do x"))
     got = bus.poll("learn", "sink", "c", block_ms=0)
-    assert len(got) == 1 and got[0][1]["success"] is True
+    assert len(got) == 1
+    assert got[0][1]["success"] is True

@@ -54,10 +54,10 @@ def _load_adjacency(workspace: Path) -> dict:
 class _NullOracle:
     """A degenerate oracle used when no symbol index exists: it can never prove absence, so it never prunes."""
 
-    def absent(self, key: str) -> bool:
+    def absent(self, _key: str) -> bool:
         return False
 
-    def contains(self, key: str) -> bool:
+    def contains(self, _key: str) -> bool:
         return False
 
     def stats(self) -> dict:
@@ -100,7 +100,10 @@ class BrainAccess:
             retrieval = RetrievalService.for_workspace(ws)
         oracle, degree_one = _load_oracle(ws)
         adjacency = adjacency if adjacency is not None else _load_adjacency(ws)
-        return cls(retrieval=retrieval, oracle=oracle, degree_one=degree_one, adjacency=adjacency, bus=bus, recall=recall)
+        return cls(
+            retrieval=retrieval, oracle=oracle, degree_one=degree_one,
+            adjacency=adjacency, bus=bus, recall=recall,
+        )
 
     # ── read cascade ──────────────────────────────────────────────────────────────────
     def prune(self, key: str) -> bool:
@@ -119,7 +122,9 @@ class BrainAccess:
     def neighbors(self, node: str, *, k: int | None = None) -> dict:
         return self._degree_one(self._adjacency, node, k or self._expand_k)
 
-    def context(self, task: str, *, top_k: int = 8, budget_bytes: int = 24 * 1024, expand: bool = True, key: str | None = None) -> dict:
+    def context(
+        self, task: str, *, top_k: int = 8, budget_bytes: int = 24 * 1024, expand: bool = True, key: str | None = None
+    ) -> dict:
         """The cheap-first cascade → a budgeted, cited context capsule for a task.
 
         `key` (optional) is a specific symbol the task hinges on: if the oracle PROVES it absent, the whole

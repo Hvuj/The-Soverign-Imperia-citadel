@@ -80,7 +80,9 @@
       "Bash(docker --version)",
       "PowerShell(Write-Output \"=== uv.toml \\(project\\) ===\"; if \\(Test-Path uv.toml\\) { Get-Content uv.toml } else { Write-Output \"\\(none\\)\" }; Write-Output \"=== global uv config ===\"; $g = Join-Path $env:APPDATA \"uv\\\\uv.toml\"; if \\(Test-Path $g\\) { Get-Content $g } else { Write-Output \"\\(none at $g\\)\" }; Write-Output \"=== uv version ===\"; uv --version)",
       "Bash(uv run *)",
-      "Bash(citadel up *)"
+      "Bash(citadel up *)",
+      "Bash(uv pip *)",
+      "Bash(PYTHONPATH=src python -m citadel.cli consensus \"write a python function add\\(a, b\\) that returns their sum\" --code)"
     ],
     "additionalDirectories": [
       "c:\\Users\\Hvuj\\.claude\\projects\\c--Users-Hvuj-OneDrive-Desktop-VIREN\\memory"
