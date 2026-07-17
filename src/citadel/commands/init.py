@@ -220,6 +220,32 @@ def _remove_link(path: Path) -> None:
         os.rmdir(str(path))
 
 
+def _is_link_like(path: Path) -> bool:
+    """Return whether *path* is a symlink or Windows directory junction."""
+    return path.is_symlink() or os.path.isjunction(path)
+
+
+def _normalized_link_target(link: Path, target: str | os.PathLike[str]) -> str:
+    """Normalize a link target lexically without traversing OneDrive paths."""
+    value = os.fspath(target)
+    if value.startswith("\\\\?\\UNC\\"):
+        value = "\\\\" + value[8:]
+    elif value.startswith("\\\\?\\"):
+        value = value[4:]
+    if not os.path.isabs(value):
+        value = os.path.join(os.fspath(link.parent), value)
+    return os.path.normcase(os.path.normpath(os.path.abspath(value)))
+
+
+def _link_points_to(link: Path, target: Path, expected_text: str) -> bool:
+    """Compare symlink/junction targets without ``resolve()`` filesystem walks."""
+    try:
+        existing = os.readlink(link)
+    except OSError:
+        return False
+    return existing == expected_text or _normalized_link_target(link, existing) == _normalized_link_target(link, target)
+
+
 def _create_link(root_path: Path, citadel_target: Path, rel_target: str) -> str:
     """Create a symlink pointing at *rel_target* (or a Windows fallback).
 
@@ -243,7 +269,7 @@ def _create_link(root_path: Path, citadel_target: Path, rel_target: str) -> str:
             import _winapi
 
             create_junction = getattr(_winapi, "CreateJunction")  # noqa: B009
-            create_junction(str(citadel_target.resolve()), str(root_path))
+            create_junction(os.path.abspath(citadel_target), str(root_path))
             return "junction"
         except (ImportError, OSError, AttributeError):
             shutil.copytree(str(citadel_target), str(root_path))
@@ -279,13 +305,8 @@ def _ensure_root_symlinks(ws: Path) -> None:
             else:
                 citadel_target.mkdir(parents=True, exist_ok=True)
 
-        if root_path.is_symlink():
-            existing = os.readlink(str(root_path))
-            try:
-                resolved_ok = Path(existing).resolve() == citadel_target.resolve()
-            except Exception:
-                resolved_ok = False
-            if existing == rel_target or resolved_ok:
+        if _is_link_like(root_path):
+            if _link_points_to(root_path, citadel_target, rel_target):
                 continue
             _remove_link(root_path)
         elif root_path.exists():
@@ -325,8 +346,8 @@ def _ensure_bundled_dir_symlinks(ws: Path) -> None:
         if not target.is_dir():
             continue
         link = ws / name
-        if link.is_symlink():
-            if link.resolve() == target.resolve():
+        if _is_link_like(link):
+            if _link_points_to(link, target, str(target)):
                 continue
             _remove_link(link)
         elif link.exists():

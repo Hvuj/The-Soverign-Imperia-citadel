@@ -9,6 +9,8 @@ from datetime import UTC, datetime
 
 from _brain_common import ROOT, STATE, load_json, write_json
 
+from citadel._process import pid_is_alive
+
 CFG=ROOT/".claude/daemon/incremental-brain-config.json"; SNAP=STATE/"incremental-brain-snapshot.json"; PID=STATE/"incremental-brain-daemon.pid"; STOP=STATE/"incremental-brain-daemon.stop"; EVENTS=STATE/"incremental-brain-events.ndjson"; LOG=STATE/"incremental-brain-daemon.log"
 
 
@@ -87,9 +89,9 @@ def watch():
 def status():
     print("# Incremental Brain Daemon")
     if PID.exists():
-        pid=PID.read_text().strip(); alive=False
-        try: os.kill(int(pid),0); alive=True
-        except Exception: pass
+        pid=PID.read_text().strip()
+        try: alive=pid_is_alive(int(pid))
+        except ValueError: alive=False
         print(f"pid: {pid}"); print(f"running: {'yes' if alive else 'no'}")
     else: print("running: no")
 

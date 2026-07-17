@@ -17,6 +17,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from citadel._process import pid_is_alive
+
 ROOT = Path(os.environ.get("CITADEL_WORKSPACE") or Path(__file__).resolve().parents[1])
 _MANIFESTS_DIR = ROOT / ".claude" / "state" / "execution-manifests"
 _LOCKS_DIR = ROOT / ".claude" / "state" / "locks"
@@ -339,9 +341,9 @@ def _clean_stale_lock(path: Path) -> None:
     try:
         pid_bytes = path.read_bytes()
         pid = int(pid_bytes.strip()) if pid_bytes.strip() else 0
-        if pid:
-            os.kill(pid, 0)
-    except (ProcessLookupError, ValueError, OSError):
+        if pid and not pid_is_alive(pid):
+            path.unlink(missing_ok=True)
+    except (ValueError, OSError):
         path.unlink(missing_ok=True)
 
 
@@ -352,12 +354,8 @@ def detect_stuck_tasks() -> list[TaskManifest]:
         if m.status not in _STUCK_STATES:
             continue
         pid = m.pid
-        if pid:
-            try:
-                os.kill(pid, 0)
-                continue
-            except (ProcessLookupError, OSError):
-                pass
+        if pid and pid_is_alive(pid):
+            continue
         stuck.append(m)
     return stuck
 

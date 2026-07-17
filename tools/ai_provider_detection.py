@@ -59,7 +59,8 @@ def detect_claude_code(config: dict) -> dict:
         }
 
     cmd = provider_cfg.get("command", "claude") or "claude"
-    found = shutil.which(cmd)
+    configured_bin = os.environ.get("CLAUDE_BIN")
+    found = configured_bin if configured_bin and Path(configured_bin).is_file() else shutil.which(cmd)
 
     if not found:
         return {
@@ -69,10 +70,10 @@ def detect_claude_code(config: dict) -> dict:
             "hint": f"'{cmd}' not found on PATH. Install Claude Code or add it to PATH.",
         }
 
-    version = _safe_version(cmd, "--version")
+    version = _safe_version(found, "--version")
     return {
         "configured": True, "available": True,
-        "mode": "cli", "command": cmd, "version": version or "unknown",
+        "mode": "cli", "command": found, "version": version or "unknown",
         "status": "green",
     }
 
@@ -134,8 +135,6 @@ def detect_anthropic_sdk(config: dict) -> dict:
 
 def resolve_providers(config: dict, detection: dict) -> dict:
     """Map each mode to the best available provider."""
-    default_modes = config.get("default_modes", {})
-
     def _best_for(mode_key: str, allowed_attr: str) -> str | None:
         providers_cfg = config.get("providers", {})
         for p_name in ["claude_code", "cowork", "anthropic_sdk"]:
@@ -243,7 +242,6 @@ def main() -> None:
         print("=" * 40)
         for p_name in ("claude_code", "cowork", "anthropic_sdk"):
             det = status[p_name]
-            avail = det.get("available", False)
             s = det.get("status", "unknown")
             cmd = det.get("command", "")
             ver = det.get("version", "")

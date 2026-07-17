@@ -2,6 +2,29 @@
 from __future__ import annotations
 import json,subprocess,sys,os,math
 from pathlib import Path
+def process_is_alive(pid):
+    """Non-signaling PID probe; this asset must work outside Citadel's venv."""
+    if pid<=0: return False
+    if os.name!="nt":
+        try: os.kill(pid,0)
+        except ProcessLookupError: return False
+        except PermissionError: return True
+        except OSError: return False
+        return True
+    import ctypes
+    from ctypes import wintypes
+    kernel32=ctypes.WinDLL("kernel32",use_last_error=True)
+    kernel32.OpenProcess.argtypes=(wintypes.DWORD,wintypes.BOOL,wintypes.DWORD)
+    kernel32.OpenProcess.restype=wintypes.HANDLE
+    kernel32.GetExitCodeProcess.argtypes=(wintypes.HANDLE,ctypes.POINTER(wintypes.DWORD))
+    kernel32.GetExitCodeProcess.restype=wintypes.BOOL
+    kernel32.CloseHandle.argtypes=(wintypes.HANDLE,)
+    handle=kernel32.OpenProcess(0x1000,False,pid)
+    if not handle: return ctypes.get_last_error()==5
+    try:
+        exit_code=wintypes.DWORD()
+        return bool(kernel32.GetExitCodeProcess(handle,ctypes.byref(exit_code))) and exit_code.value==259
+    finally: kernel32.CloseHandle(handle)
 def stdin_json():
     try:
         raw=sys.stdin.read(); return json.loads(raw) if raw.strip() else {}
@@ -27,7 +50,7 @@ def status_icon(val):
     else: return "?"
 def pid_alive(pidfile):
     try:
-        os.kill(int(pidfile.read_text().strip()),0); return True
+        return process_is_alive(int(pidfile.read_text().strip()))
     except Exception: return False
 DAEMON_PIDS={
     "incremental_brain_daemon":"incremental-brain-daemon.pid",
@@ -37,6 +60,7 @@ DAEMON_PIDS={
     "ram_cache_daemon":"ram-cache-daemon.pid",
     "bug_record_daemon":"bug-record-daemon.pid",
     "zombie_worker_daemon":"zombie-worker-daemon.pid",
+    "embedder_daemon":"embedder-daemon.pid",
     "citadel_ui_server":"citadel-ui-server.pid",
 }
 MINING_DAEMONS={"git_history_daemon","outcome_miner_daemon","zombie_worker_daemon"}

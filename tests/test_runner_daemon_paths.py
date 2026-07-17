@@ -74,3 +74,40 @@ def test_start_daemon_can_skip_onedrive_tool_stat(tmp_path, monkeypatch):
     )
 
     assert pid == 54321
+
+
+def test_daemon_alive_uses_non_signaling_process_probe(tmp_path, monkeypatch):
+    managed = tmp_path / ".citadel" / ".claude" / "state"
+    managed.mkdir(parents=True)
+    (managed / "worker.pid").write_text("43210", encoding="utf-8")
+
+    monkeypatch.setattr(_runner, "pid_is_alive", lambda pid: pid == 43210)
+
+    assert _runner.daemon_alive(".claude/state/worker.pid", tmp_path)
+
+
+def test_windows_daemon_spawn_is_detached_from_foreground_console(monkeypatch):
+    monkeypatch.setattr(_runner.sys, "platform", "win32")
+    monkeypatch.setattr(_runner.subprocess, "BELOW_NORMAL_PRIORITY_CLASS", 0x4000, raising=False)
+    monkeypatch.setattr(_runner.subprocess, "CREATE_NEW_PROCESS_GROUP", 0x0200, raising=False)
+    monkeypatch.setattr(_runner.subprocess, "DETACHED_PROCESS", 0x0008, raising=False)
+
+    kwargs = _runner._low_priority_spawn_kwargs()
+
+    assert kwargs["creationflags"] & _runner.subprocess.CREATE_NEW_PROCESS_GROUP
+    assert kwargs["creationflags"] & _runner.subprocess.DETACHED_PROCESS
+    assert kwargs["stdin"] is _runner.subprocess.DEVNULL
+
+
+def test_windows_pidfile_identity_uses_inspected_command_line(monkeypatch):
+    monkeypatch.setattr(_runner, "process_command_line", lambda _pid: "python C:/tools/worker.py")
+
+    assert _runner._pid_is_our_daemon(43210, "worker.py")
+    assert not _runner._pid_is_our_daemon(43210, "different.py")
+
+
+def test_windows_uninspectable_pid_is_not_reused(monkeypatch):
+    monkeypatch.setattr(_runner.sys, "platform", "win32")
+    monkeypatch.setattr(_runner, "process_command_line", lambda _pid: None)
+
+    assert not _runner._pid_is_our_daemon(43210, "worker.py")

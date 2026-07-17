@@ -68,8 +68,11 @@ def test_generation_is_idempotent(tmp_path):
     _gen.generate(tmp_path, u)
     skill = tmp_path / ".claude" / "skills" / "logic-review-airline" / "SKILL.md"
     first = skill.read_text(encoding="utf-8")
+    os.utime(skill, ns=(1_000_000_000, 1_000_000_000))
+    stable_mtime = skill.stat().st_mtime_ns
     _gen.generate(tmp_path, u)                                  # regenerate
     assert skill.read_text(encoding="utf-8") == first           # byte-identical
+    assert skill.stat().st_mtime_ns == stable_mtime              # no rewrite/self-trigger loop
 
 
 def test_templates_are_agnostic_and_isolated(tmp_path):

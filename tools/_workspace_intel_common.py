@@ -18,6 +18,8 @@ import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 
+from citadel._process import pid_is_alive
+
 
 def _resolve_workspace_root() -> Path:
     env = os.environ.get("CITADEL_WORKSPACE")
@@ -418,11 +420,9 @@ def _try_acquire_lock(lock_path: Path) -> bool:
             if age > LOCK_STALE_SECONDS:
                 lock_path.unlink(missing_ok=True)
             else:
-                try:
-                    os.kill(pid, 0)
+                if pid_is_alive(pid):
                     return False
-                except (ProcessLookupError, PermissionError):
-                    lock_path.unlink(missing_ok=True)
+                lock_path.unlink(missing_ok=True)
         except Exception:
             lock_path.unlink(missing_ok=True)
     try:

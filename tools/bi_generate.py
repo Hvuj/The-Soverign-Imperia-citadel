@@ -160,6 +160,17 @@ def script_sh(province: str) -> str:
     ]) + "\n"
 
 
+def _write_if_changed(path: Path, content: str) -> None:
+    """Write generated content only when bytes differ, preserving stable mtimes."""
+    try:
+        if path.read_text(encoding="utf-8") == content:
+            return
+    except OSError:
+        pass
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
+
+
 def generate(root: str | Path, understanding: dict, *, write: bool = True, min_confidence: float = 0.4) -> dict:
     """Emit all artifacts for a province's understanding. Returns {kind: [paths]}."""
     root = Path(root).resolve()
@@ -182,8 +193,7 @@ def generate(root: str | Path, understanding: dict, *, write: bool = True, min_c
 
     for path, content, kind in files:
         if write:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(content, encoding="utf-8")
+            _write_if_changed(path, content)
         outputs[kind].append(str(path.relative_to(root)) if path.is_relative_to(root) else str(path))
     return outputs
 

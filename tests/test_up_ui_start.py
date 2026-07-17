@@ -26,3 +26,36 @@ def test_ui_start_returns_url_only_after_port_is_ready(monkeypatch):
     monkeypatch.setattr(up_mod, "_wait_for_port", lambda *_args, **_kwargs: True)
 
     assert up_mod._start_ui_server(Path("workspace")) == "http://localhost:9876/brain/graph.html"
+
+
+def test_find_claude_bin_discovers_latest_windows_bundle(monkeypatch, tmp_path):
+    older = (
+        tmp_path
+        / ".vscode"
+        / "extensions"
+        / "anthropic.claude-code-2.1.99-win32-x64"
+        / "resources"
+        / "native-binary"
+        / "claude.exe"
+    )
+    newer = (
+        tmp_path
+        / ".vscode"
+        / "extensions"
+        / "anthropic.claude-code-2.1.212-win32-x64"
+        / "resources"
+        / "native-binary"
+        / "claude.exe"
+    )
+    older.parent.mkdir(parents=True)
+    newer.parent.mkdir(parents=True)
+    older.touch()
+    newer.touch()
+
+    monkeypatch.setattr(up_mod.sys, "platform", "win32")
+    monkeypatch.setattr(up_mod.shutil, "which", lambda _name: None)
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
+    monkeypatch.setenv("APPDATA", str(tmp_path / "appdata"))
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "localappdata"))
+
+    assert up_mod._find_claude_bin() == str(newer)

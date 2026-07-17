@@ -11,6 +11,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from citadel._process import pid_is_alive, process_command_line
+
 
 def _package_root() -> Path:
     """This file's absolute path WITHOUT `os.path.realpath`.
@@ -123,28 +125,22 @@ def _pid_is_our_daemon(pid: int, tool_name: str) -> bool:
     so this never blocks a false negative — it only catches obvious PID reuse.
     """
     stem = tool_name.removesuffix(".py")
-    try:
-        cmdline = Path(f"/proc/{pid}/cmdline").read_bytes().replace(b"\x00", b" ").decode(errors="replace")
-        return stem in cmdline
-    except OSError:
-        pass
-    import subprocess
-    try:
-        r = subprocess.run(
-            ["ps", "-p", str(pid), "-o", "args="],
-            capture_output=True, timeout=2,
-        )
-        return stem in r.stdout.decode(errors="replace")
-    except Exception:
-        return True
+    cmdline = process_command_line(pid)
+    if cmdline is None:
+        return sys.platform != "win32"
+    return stem in cmdline
 
 
 def _low_priority_spawn_kwargs() -> dict:
-    """Popen kwargs that start a daemon below normal priority (Windows only here)."""
+    """Popen kwargs that detach Windows daemons at below-normal priority."""
     if sys.platform == "win32":
-        flags = getattr(subprocess, "BELOW_NORMAL_PRIORITY_CLASS", 0)
+        flags = (
+            getattr(subprocess, "BELOW_NORMAL_PRIORITY_CLASS", 0)
+            | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+            | getattr(subprocess, "DETACHED_PROCESS", 0)
+        )
         if flags:
-            return {"creationflags": flags}
+            return {"creationflags": flags, "stdin": subprocess.DEVNULL}
     return {}
 
 
@@ -212,8 +208,7 @@ def start_daemon(
     if pidfile.exists():
         try:
             existing_pid = int(pidfile.read_text().strip())
-            os.kill(existing_pid, 0)
-            if _pid_is_our_daemon(existing_pid, tool_name):
+            if pid_is_alive(existing_pid) and _pid_is_our_daemon(existing_pid, tool_name):
                 return existing_pid
         except (ValueError, OSError):
             pass
@@ -259,7 +254,6 @@ def daemon_alive(pidfile_rel: str, ws: Path) -> bool:
         return False
     try:
         pid = int(pidfile.read_text().strip())
-        os.kill(pid, 0)
-        return True
     except (ValueError, OSError):
         return False
+    return pid_is_alive(pid)
