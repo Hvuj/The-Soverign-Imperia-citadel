@@ -24,7 +24,7 @@ from citadel.commands._runner import (
     start_daemon,
 )
 from citadel.commands._theme import print_up_banner
-from citadel.paths import resolve_home
+from citadel.paths import is_unsafe_placement, resolve_home
 
 
 def _ensure_workspace_trusted(ws: Path) -> None:
@@ -504,6 +504,11 @@ def run(
     if not ws.exists():
         print(f"ERROR: workspace '{ws}' does not exist.", file=sys.stderr)
         return 1
+
+    unsafe = is_unsafe_placement(ws)
+    if unsafe:
+        print(f"  [warn] workspace {unsafe}. Daemon starts are watchdog-guarded so `up` won't hang, but for "
+              "full reliability move the workspace off OneDrive (e.g. C:\\dev\\).")
 
     if not (ws / ".citadel" / "config.toml").exists() and not (ws / ".claude").exists():
         print("  [hint] workspace not initialized — run `citadel init` first for full brain setup")

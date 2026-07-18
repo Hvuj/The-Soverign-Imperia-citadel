@@ -9,9 +9,27 @@ import functools
 import os
 import subprocess
 import sys
+import threading
 from pathlib import Path
 
 from citadel._process import pid_is_alive, process_command_line
+
+# A single blocking filesystem op under OneDrive (a `mkdir`/`open` on a dehydrated cloud placeholder) can
+# stall indefinitely — no exception, just a hang. `try/except` can't catch that. So daemon starts run under a
+# hard wall-clock watchdog: if one stalls past this budget, it is abandoned and skipped so `citadel up` still
+# completes (daemons are best-effort). The durable cure is not hosting the workspace under OneDrive.
+_DAEMON_START_TIMEOUT = 15.0
+# Directories created this process — skip redundant mkdir/stat probes on the OneDrive hot path.
+_created_dirs: set[str] = set()
+
+
+def _ensure_dir(path: Path) -> None:
+    """`mkdir -p`, memoized: a directory made once this process is never re-probed (fewer OneDrive stalls)."""
+    key = os.path.abspath(path)
+    if key in _created_dirs:
+        return
+    path.mkdir(parents=True, exist_ok=True)
+    _created_dirs.add(key)
 
 
 def _package_root() -> Path:
@@ -184,15 +202,49 @@ def start_daemon(
 ) -> int | None:
     """Start a daemon tool in a detached subprocess if not already running.
 
-    Returns the PID of the (new or existing) daemon, or None on failure.
+    Returns the PID of the (new or existing) daemon, or None on failure. Runs under a wall-clock watchdog: if
+    the start blocks past ``_DAEMON_START_TIMEOUT`` (a OneDrive placeholder stall that no ``try/except`` can
+    catch), it is abandoned and skipped so ``citadel up`` never hangs. Callers treat ``None`` as a non-fatal
+    skip.
+
     - Idempotent: if the pidfile exists and the process is alive, returns its PID.
-    - State files are written to the initialized workspace's managed
-      ``.citadel/.claude`` directory, bypassing the root symlink/junction.
-    - ``check_tool=False`` skips a redundant pre-spawn stat for callers that
-      must avoid OneDrive placeholder stalls; ``Popen`` still reports a missing
-      script through the daemon log/process exit.
+    - State files are written to the initialized workspace's managed ``.citadel/.claude`` directory,
+      bypassing the root symlink/junction.
+    - ``check_tool=False`` skips a redundant pre-spawn stat for callers that must avoid OneDrive stalls.
     - Missing optional deps (watchdog, anthropic) → warning, not an error.
     """
+    result: dict[str, int | None] = {"pid": None}
+
+    def _work() -> None:
+        with contextlib.suppress(Exception):  # inner already warns; the watchdog owns skip semantics
+            result["pid"] = _start_daemon_inner(
+                tool_name, ws, daemon_args, pidfile_rel, out_rel, err_rel, check_tool=check_tool
+            )
+
+    worker = threading.Thread(target=_work, name=f"start-daemon-{tool_name}", daemon=True)
+    worker.start()
+    worker.join(_DAEMON_START_TIMEOUT)
+    if worker.is_alive():
+        print(
+            f"  [warn] {tool_name} start stalled (>{_DAEMON_START_TIMEOUT:.0f}s, likely a OneDrive filesystem "
+            "stall) — skipping",
+            file=sys.stderr,
+        )
+        return None
+    return result["pid"]
+
+
+def _start_daemon_inner(
+    tool_name: str,
+    ws: Path,
+    daemon_args: list[str],
+    pidfile_rel: str,
+    out_rel: str,
+    err_rel: str,
+    *,
+    check_tool: bool = True,
+) -> int | None:
+    """The actual spawn — run inside the watchdog thread by ``start_daemon``."""
     tool = _tools_dir() / tool_name
     if check_tool and not tool.exists():
         print(f"  [warn] daemon tool not found: tools/{tool_name}", file=sys.stderr)
@@ -200,7 +252,7 @@ def start_daemon(
 
     try:
         pidfile = _daemon_path(ws, pidfile_rel)
-        pidfile.parent.mkdir(parents=True, exist_ok=True)
+        _ensure_dir(pidfile.parent)
     except OSError as exc:
         print(f"  [warn] {tool_name} state path unavailable: {exc}", file=sys.stderr)
         return None
@@ -216,8 +268,8 @@ def start_daemon(
     try:
         out_path = _daemon_path(ws, out_rel)
         err_path = _daemon_path(ws, err_rel)
-        out_path.parent.mkdir(parents=True, exist_ok=True)
-        err_path.parent.mkdir(parents=True, exist_ok=True)
+        _ensure_dir(out_path.parent)
+        _ensure_dir(err_path.parent)
     except OSError as exc:
         print(f"  [warn] {tool_name} log path unavailable: {exc}", file=sys.stderr)
         return None
