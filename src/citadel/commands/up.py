@@ -53,8 +53,8 @@ def _ensure_workspace_trusted(ws: Path) -> None:
         data: dict = {}
         if cfg_path.exists():
             try:
-                data = json.loads(cfg_path.read_text())
-            except (json.JSONDecodeError, OSError):
+                data = json.loads(cfg_path.read_text(encoding="utf-8"))
+            except Exception:  # never block launch: cp1252/UnicodeDecodeError, JSON errors, IO — all tolerated
                 return
         entry = data.setdefault("projects", {}).setdefault(str(ws), {})
 
@@ -67,8 +67,8 @@ def _ensure_workspace_trusted(ws: Path) -> None:
         mcp_path = ws / ".mcp.json"
         if mcp_path.exists():
             try:
-                servers = list(json.loads(mcp_path.read_text()).get("mcpServers", {}))
-            except (json.JSONDecodeError, OSError):
+                servers = list(json.loads(mcp_path.read_text(encoding="utf-8")).get("mcpServers", {}))
+            except Exception:
                 servers = []
             if servers:
                 enabled = list(entry.get("enabledMcpjsonServers") or [])
@@ -134,8 +134,8 @@ def _seed_effort_level_setting(ws: Path, level: str) -> None:
         if not settings_path.exists():
             return
         try:
-            data = json.loads(settings_path.read_text())
-        except (json.JSONDecodeError, OSError):
+            data = json.loads(settings_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError, UnicodeDecodeError):
             return
         if not isinstance(data, dict):
             return
@@ -463,7 +463,7 @@ def _run_health(ws: Path) -> str:
         )
         if ok and out_path.exists():
             try:
-                data = json.loads(out_path.read_text())
+                data = json.loads(out_path.read_text(encoding="utf-8"))
                 health = data.get("overall_status", "unknown")
                 checks = data.get("checks", [])
             except Exception:

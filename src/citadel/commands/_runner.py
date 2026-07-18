@@ -259,7 +259,7 @@ def _start_daemon_inner(
 
     if pidfile.exists():
         try:
-            existing_pid = int(pidfile.read_text().strip())
+            existing_pid = int(pidfile.read_text(encoding="utf-8").strip())
             if pid_is_alive(existing_pid) and _pid_is_our_daemon(existing_pid, tool_name):
                 return existing_pid
         except (ValueError, OSError):
@@ -305,7 +305,7 @@ def daemon_alive(pidfile_rel: str, ws: Path) -> bool:
     if not pidfile.exists():
         return False
     try:
-        pid = int(pidfile.read_text().strip())
+        pid = int(pidfile.read_text(encoding="utf-8").strip())
     except (ValueError, OSError):
         return False
     return pid_is_alive(pid)

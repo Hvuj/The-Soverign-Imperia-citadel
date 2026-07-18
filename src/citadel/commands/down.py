@@ -83,7 +83,7 @@ def run(workspace: str | None = None) -> int:
             print(f"  {label}: not running (no pidfile)")
             continue
         try:
-            pid = int(pidfile.read_text().strip())
+            pid = int(pidfile.read_text(encoding="utf-8").strip())
         except (ValueError, OSError):
             pidfile.unlink(missing_ok=True)
             print(f"  {label}: stale pidfile removed")

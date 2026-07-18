@@ -295,7 +295,7 @@ def _cmd_do(args: argparse.Namespace) -> int:
         if getattr(args, "verify", None):
             verify = verify_by_command(shlex.split(args.verify))
         elif py_targets:
-            check = "import ast;" + "".join(f"ast.parse(open({t!r}).read());" for t in py_targets)
+            check = "import ast;" + "".join(f"ast.parse(open({t!r}, encoding='utf-8').read());" for t in py_targets)
             verify = verify_by_command([sys.executable, "-c", check])
         else:
             verify = None

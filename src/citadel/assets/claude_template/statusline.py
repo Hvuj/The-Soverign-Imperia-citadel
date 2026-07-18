@@ -50,7 +50,7 @@ def status_icon(val):
     else: return "?"
 def pid_alive(pidfile):
     try:
-        return process_is_alive(int(pidfile.read_text().strip()))
+        return process_is_alive(int(pidfile.read_text(encoding="utf-8").strip()))
     except Exception: return False
 DAEMON_PIDS={
     "incremental_brain_daemon":"incremental-brain-daemon.pid",
@@ -91,7 +91,7 @@ def legion_mix(state):
     """
     try:
         ptr=state/"legion-runs/current-run.json"
-        run_id=json.loads(ptr.read_text()).get("run_id")
+        run_id=json.loads(ptr.read_text(encoding="utf-8")).get("run_id")
         if not run_id: return ""
         ledger=state/"legion-runs"/run_id/"ledger.ndjson"
         data=ledger.read_bytes()
@@ -133,7 +133,7 @@ daemons_alive=sum(1 for f in DAEMON_PIDS.values() if pid_alive(state/f))
 daemons_mining=sum(1 for n,f in DAEMON_PIDS.items() if n in MINING_DAEMONS and pid_alive(state/f))
 active_agent_cnt=active_agents(state/"agent-runs.ndjson")
 dirs=0
-try: dirs=len(json.loads((project/"docs/brain/directories/index.json").read_text()).get("directories",[]))
+try: dirs=len(json.loads((project/"docs/brain/directories/index.json").read_text(encoding="utf-8")).get("directories",[]))
 except Exception: pass
 cache="hit" if (state/"current-task.json").exists() else "miss"
 ui_port=os.environ.get("Citadel_UI_PORT","8765")

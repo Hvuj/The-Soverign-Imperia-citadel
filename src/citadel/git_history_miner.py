@@ -323,8 +323,8 @@ def write_brain_nodes(
 def load_miner_state(state_file: Path) -> dict:
     if state_file.exists():
         try:
-            return json.loads(state_file.read_text())
-        except (OSError, json.JSONDecodeError):
+            return json.loads(state_file.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError, UnicodeDecodeError):
             pass
     return {}
 
