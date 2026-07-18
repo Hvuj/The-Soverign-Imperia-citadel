@@ -189,6 +189,27 @@ def _copy_claude_template(ws: Path, *, overwrite: bool = False) -> None:
                     dest.chmod(dest.stat().st_mode | 0o111)
 
 
+def _bake_project_dir(ws: Path) -> None:
+    """Replace ``$CLAUDE_PROJECT_DIR`` in the seeded settings.json with the absolute workspace path.
+
+    Claude Code expands the hook/statusLine command strings itself; if it launches without a detected
+    project it leaves ``$CLAUDE_PROJECT_DIR`` empty, so every ``bash "$CLAUDE_PROJECT_DIR/.claude/…"``
+    collapses to ``/.claude/…`` and fails on each tick (the SessionStart error + the 5s statusLine spam).
+    Baking the concrete path (bash-style forward slashes, e.g. ``C:/Users/…/citadel-home``) makes those
+    command paths resolve regardless of what Claude Code sets. Idempotent: once baked, no token remains.
+    The hook scripts' *internal* ``$CLAUDE_PROJECT_DIR`` is guaranteed separately by ``hooks/_common.sh``.
+    """
+    settings = ws / ".citadel" / ".claude" / "settings.json"
+    try:
+        text = settings.read_text(encoding="utf-8")
+    except OSError:
+        return
+    if "$CLAUDE_PROJECT_DIR" not in text:
+        return
+    bash_ws = os.path.abspath(ws).replace("\\", "/")
+    settings.write_text(text.replace("$CLAUDE_PROJECT_DIR", bash_ws), encoding="utf-8")
+
+
 def _copy_claude_md(ws: Path, *, overwrite: bool = False) -> None:
     """Write CLAUDE.md template into .citadel/CLAUDE.md in the workspace.
 
@@ -537,6 +558,7 @@ def run(workspace: str, *, branch: str | None = None, force: bool = False) -> in
 
     print("[2/11] Installing .citadel/.claude/ hooks, agents, skills …")
     _copy_claude_template(ws, overwrite=force)
+    _bake_project_dir(ws)
     _copy_claude_md(ws, overwrite=force)
     _copy_mcp_json(ws, overwrite=force)
     _ensure_root_symlinks(ws)

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+source "$(dirname "${BASH_SOURCE[0]}")/_common.sh"
 # logic-autolearn-sync — re-learn + regenerate + re-wire this workspace's domain logic (Pandidakterion).
 # Fires on PostToolBatch / a git-change branch. Best-effort and zero-token: it only runs the deterministic
 # Cartographer pipeline and never blocks the session (|| true), so a hiccup is never fatal.

@@ -12,7 +12,7 @@ import sys
 import threading
 from pathlib import Path
 
-from citadel._process import pid_is_alive, process_command_line
+from citadel._process import no_window_creationflags, pid_is_alive, process_command_line
 
 # A single blocking filesystem op under OneDrive (a `mkdir`/`open` on a dehydrated cloud placeholder) can
 # stall indefinitely — no exception, just a hang. `try/except` can't catch that. So daemon starts run under a
@@ -120,6 +120,7 @@ def run_tool(
             env=env,
             capture_output=quiet,
             timeout=timeout,
+            creationflags=no_window_creationflags(),
         )
         if result.returncode != 0:
             print(f"  [warn] tools/{name} exited {result.returncode}", file=sys.stderr)
@@ -150,12 +151,16 @@ def _pid_is_our_daemon(pid: int, tool_name: str) -> bool:
 
 
 def _low_priority_spawn_kwargs() -> dict:
-    """Popen kwargs that detach Windows daemons at below-normal priority."""
+    """Popen kwargs that run Windows daemons hidden, at below-normal priority, in their own group.
+
+    ``CREATE_NO_WINDOW`` (was ``DETACHED_PROCESS``): a detached process has no console, so each Python tool
+    a daemon shells out to popped a fresh visible window — ``CREATE_NO_WINDOW`` gives a hidden console
+    instead. ``CREATE_NEW_PROCESS_GROUP`` is kept so ``citadel down`` can group-signal the daemon."""
     if sys.platform == "win32":
         flags = (
             getattr(subprocess, "BELOW_NORMAL_PRIORITY_CLASS", 0)
             | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
-            | getattr(subprocess, "DETACHED_PROCESS", 0)
+            | no_window_creationflags()
         )
         if flags:
             return {"creationflags": flags, "stdin": subprocess.DEVNULL}

@@ -628,6 +628,16 @@ def run(
     model = os.environ.get("CLAUDE_MODEL", "opusplan")
     perm = os.environ.get("CLAUDE_PERMISSION_MODE", "plan")
     cmd = [claude_bin, "--model", model, "--permission-mode", perm, "--ide"] + (passthrough or [])
+    # Launch Claude Code from *inside* the workspace so it detects this as the project root and sets
+    # $CLAUDE_PROJECT_DIR for every hook + the statusLine. Without this the launch cwd stays wherever the
+    # user ran `citadel up`, $CLAUDE_PROJECT_DIR is empty, and every `bash "$CLAUDE_PROJECT_DIR/.claude/…"`
+    # hook + the 5s statusLine expands to a bogus `/.claude/…` and fails. (settings.json also carries baked
+    # absolute paths as a fallback — see init._bake_project_dir.)
+    try:
+        os.chdir(ws)
+    except OSError as exc:
+        print(f"  [warn] could not chdir to workspace ({exc}); hooks rely on baked settings.json paths",
+              file=sys.stderr)
     print(f"Launching: {' '.join(cmd)}")
     sys.stdout.flush()
     sys.stderr.flush()

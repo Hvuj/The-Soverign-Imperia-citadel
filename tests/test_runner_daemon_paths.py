@@ -86,16 +86,21 @@ def test_daemon_alive_uses_non_signaling_process_probe(tmp_path, monkeypatch):
     assert _runner.daemon_alive(".claude/state/worker.pid", tmp_path)
 
 
-def test_windows_daemon_spawn_is_detached_from_foreground_console(monkeypatch):
+def test_windows_daemon_spawn_is_hidden_and_grouped(monkeypatch):
     monkeypatch.setattr(_runner.sys, "platform", "win32")
     monkeypatch.setattr(_runner.subprocess, "BELOW_NORMAL_PRIORITY_CLASS", 0x4000, raising=False)
     monkeypatch.setattr(_runner.subprocess, "CREATE_NEW_PROCESS_GROUP", 0x0200, raising=False)
+    monkeypatch.setattr(_runner.subprocess, "CREATE_NO_WINDOW", 0x0800, raising=False)
     monkeypatch.setattr(_runner.subprocess, "DETACHED_PROCESS", 0x0008, raising=False)
 
     kwargs = _runner._low_priority_spawn_kwargs()
 
+    # Hidden console (children inherit it, so no python.exe windows pop) + own process group
+    # (so `citadel down` can group-signal it). Explicitly NOT DETACHED_PROCESS: a console-less
+    # parent is exactly what made every child tool allocate a fresh visible console window.
+    assert kwargs["creationflags"] & _runner.subprocess.CREATE_NO_WINDOW
     assert kwargs["creationflags"] & _runner.subprocess.CREATE_NEW_PROCESS_GROUP
-    assert kwargs["creationflags"] & _runner.subprocess.DETACHED_PROCESS
+    assert not (kwargs["creationflags"] & _runner.subprocess.DETACHED_PROCESS)
     assert kwargs["stdin"] is _runner.subprocess.DEVNULL
 
 

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+source "$(dirname "${BASH_SOURCE[0]}")/_common.sh"
 set -euo pipefail
 input="$(cat || true)"
 lines="$(printf '%s\n' "$input" | wc -l | tr -d ' ')"

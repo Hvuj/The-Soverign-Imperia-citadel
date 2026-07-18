@@ -9,6 +9,16 @@ from collections.abc import Iterator
 from pathlib import Path
 
 
+def no_window_creationflags() -> int:
+    """``subprocess`` ``creationflags`` that keep a spawned child off-screen on Windows (0 elsewhere).
+
+    ``CREATE_NO_WINDOW`` gives a console child a *hidden* console instead of letting Windows pop a fresh
+    visible window — the cause of the ``python.exe`` windows that flashed while daemons shelled out. Applied
+    at every spawn boundary (the daemon launcher in ``_runner`` and the daemons' own ``subprocess`` calls)
+    so no window ever appears, independent of console-inheritance subtleties."""
+    return getattr(subprocess, "CREATE_NO_WINDOW", 0) if sys.platform == "win32" else 0
+
+
 def pid_is_alive(pid: int) -> bool:
     """Return whether *pid* is running without changing process state.
 

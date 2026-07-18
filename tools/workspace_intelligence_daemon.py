@@ -18,6 +18,10 @@ import sys
 import time
 from pathlib import Path
 
+from citadel._process import no_window_creationflags
+
+_NO_WINDOW = no_window_creationflags()
+
 _TOOLS = Path(__file__).resolve().parent
 if str(_TOOLS) not in sys.path:
     sys.path.insert(0, str(_TOOLS))
@@ -73,7 +77,7 @@ def _trigger_rebuild(cfg: dict, quiet: bool) -> None:
     try:
         result = subprocess.run(
             [PYTHON, str(_TOOLS / "build_workspace_intelligence_index.py"), "--quiet"],
-            cwd=str(ROOT), timeout=120, capture_output=True, text=True
+            cwd=str(ROOT), timeout=120, capture_output=True, text=True, creationflags=_NO_WINDOW
         )
         if result.returncode == 0:
             _log("rebuild complete", quiet)

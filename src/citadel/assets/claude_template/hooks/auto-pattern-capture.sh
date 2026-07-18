@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+source "$(dirname "${BASH_SOURCE[0]}")/_common.sh"
 # auto-pattern-capture.sh — Stop hook: auto-capture feature patterns after successful code-change tasks that passed the audit gate.
 set -euo pipefail
 
