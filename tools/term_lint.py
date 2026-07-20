@@ -5,9 +5,9 @@ Banned brands carry stale architectural assumptions. `swarm` and `VIREN` are dea
 (`LEGION` is deferred to the Phase-6 rename — the codebase still uses `legion_*` internally by decision,
 so it is not banned yet.) Historical/design docs under `docs/history/` and `docs/citadel/` are exempt (as
 is the authoritative `SYSTEM-DESIGN.md`, which must be able to name the brands it retired), as are generated
-caches and the runtime `.claude/` instance (its settings embed absolute workspace paths that may
-incidentally contain the folder name — not authored source). Exit 0 = clean, 1 = violations. `--test` runs
-an isolated self-check.
+caches and the runtime `.claude/`/`.citadel/` instances (their settings/config embed absolute workspace
+paths that may incidentally contain the folder name — e.g. `.citadel/config.toml` `root = "…/VIREN/…"` — not
+authored source). Exit 0 = clean, 1 = violations. `--test` runs an isolated self-check.
 """
 
 import argparse
@@ -17,7 +17,7 @@ from pathlib import Path
 _ROOT = Path(__file__).resolve().parents[1]
 _BANNED = re.compile(r"\b(swarm|VIREN)\b", re.IGNORECASE)
 _SCAN_SUFFIXES = {".py", ".sh", ".js", ".json", ".md", ".txt", ".yaml", ".yml", ".toml"}
-_EXEMPT_DIR_PARTS = {".git", ".venv", ".claude", "__pycache__", "node_modules", "state", "brain"}
+_EXEMPT_DIR_PARTS = {".git", ".venv", ".claude", ".citadel", "__pycache__", "node_modules", "state", "brain"}
 _EXEMPT_PREFIXES = ("docs/history/", "docs/citadel/")
 _EXEMPT_FILES = {"term_lint.py", "test_term_lint.py", "SYSTEM-DESIGN.md"}
 
@@ -61,11 +61,16 @@ def _run_self_test() -> int:
         (base / "src" / "ok.py").write_text("NAME = 'the citadel legion'\n", encoding="utf-8")
         (base / "docs" / "history").mkdir(parents=True)
         (base / "docs" / "history" / "old.md").write_text("VIREN swarm era\n", encoding="utf-8")
+        (base / "citadel-home" / ".citadel").mkdir(parents=True)
+        (base / "citadel-home" / ".citadel" / "config.toml").write_text(
+            'root = "C:/x/VIREN/citadel-home"\n', encoding="utf-8"
+        )
         files = {f for f, _, _ in scan(base)}
         assert "src/bad.py" in files, files
         assert "src/brand.py" in files, files
         assert "src/ok.py" not in files, files
         assert not any("history" in f for f in files), files
+        assert not any(".citadel" in f for f in files), files
         print("term_lint --test PASS")
         return 0
 

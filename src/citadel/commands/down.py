@@ -32,6 +32,7 @@ import sys
 from pathlib import Path
 
 from citadel._process import process_command_line
+from citadel._terminal import reset_terminal_input_modes
 from citadel.commands import _daemons
 from citadel.commands._runner import _daemon_path
 from citadel.paths import resolve_home
@@ -122,5 +123,8 @@ def run(workspace: str | None = None) -> int:
     else:
         print("  none found")
 
+    # The session just stopped may have left the terminal in mouse-tracking mode; clear it so
+    # the returning shell prompt doesn't echo every mouse move as SGR text.
+    reset_terminal_input_modes()
     print("[citadel down] done — machine is clean for a fresh `citadel up`")
     return 0

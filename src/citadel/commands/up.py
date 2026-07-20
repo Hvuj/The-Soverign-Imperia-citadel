@@ -16,6 +16,7 @@ import sys
 import time
 from pathlib import Path
 
+from citadel._terminal import reset_terminal_input_modes
 from citadel.commands import _daemons
 from citadel.commands._runner import (
     _daemon_path,
@@ -533,6 +534,9 @@ def run(
         pass
     else:
         os.chdir(ws)
+        # Clear any mouse-tracking mode a prior Claude Code session left on, so moving the
+        # mouse during this multi-second launch doesn't flood the shell with SGR reports.
+        reset_terminal_input_modes()
 
     print_up_banner()
 
