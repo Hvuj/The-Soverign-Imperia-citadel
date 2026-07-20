@@ -10,7 +10,9 @@ Security design:
 - Path is NEVER taken from the request body.
 - Only allowlisted local files are read; allowlist is from config.
 - No shell execution, no secret exposure, no external network calls.
-- Model-backed Q&A disabled unless allow_model_fallback=true in config.
+- General questions the deterministic resolver can't answer go to the free local Ollama gate
+  (allow_local_gate, on by default) — real AI at $0. Hosted Claude fallback stays opt-in
+  (allow_model_fallback=true).
 - Body size capped; question length capped; blocked patterns return safe refusals.
 - No traceback is ever sent to the client.
 """
@@ -76,11 +78,26 @@ except Exception:
     _dispatch = None  # type: ignore[assignment]
     _dispatch_stream = None  # type: ignore[assignment]
 
+# The free local gate: real AI answers from Ollama at $0, no hosted-model tokens. When present, the UI's
+# "Ask Citadel" box answers general questions with it instead of falling back to Claude.
+try:
+    from citadel.services.execute.local.engine import OllamaEngine as _OllamaEngine, RunSpec as _RunSpec
+
+    _LOCAL_GATE_AVAILABLE = True
+except Exception:
+    _LOCAL_GATE_AVAILABLE = False
+    _OllamaEngine = None  # type: ignore[assignment]
+    _RunSpec = None  # type: ignore[assignment]
+
 _DEFAULT_CONFIG: dict = {
     "enabled": True,
     "bind_host": "127.0.0.1",
     "port": 8765,
     "allow_model_fallback": False,
+    "allow_local_gate": True,
+    "local_gate_deep_model": "qwen2.5-coder:7b",
+    "local_gate_fast_model": "qwen2.5:0.5b",
+    "local_gate_max_tokens": 512,
     "max_question_chars": 1000,
     "max_answer_chars": 2500,
     "max_evidence_items": 8,
@@ -1461,6 +1478,46 @@ def _should_try_fallback(result: dict, cfg: dict) -> bool:
     return source == "unavailable" or confidence == "low"
 
 
+_LOCAL_GATE_SUBSTANTIVE = re.compile(
+    r"\b(code|function|class|method|error|bug|traceback|refactor|implement|architect|design|api|regex"
+    r"|sql|async|thread|test|debug|deploy|why|how)\b", re.I)
+
+
+def _pick_gate_model(question: str, cfg: dict) -> str:
+    """Auto-pick: short, non-technical prompts → fast small model; substantive → capable coder model."""
+    deep = cfg.get("local_gate_deep_model", "qwen2.5-coder:7b")
+    fast = cfg.get("local_gate_fast_model", "qwen2.5:0.5b")
+    return deep if (_LOCAL_GATE_SUBSTANTIVE.search(question) or len(question.split()) > 8) else fast
+
+
+def _should_try_local_gate(result: dict, cfg: dict) -> bool:
+    """The free Ollama gate answers general questions the deterministic resolver can't — $0, on by default."""
+    if not cfg.get("allow_local_gate", True) or not _LOCAL_GATE_AVAILABLE:
+        return False
+    return result.get("source") == "unavailable" or result.get("confidence") == "low"
+
+
+def _answer_via_local_gate(question: str, cfg: dict) -> dict | None:
+    """Answer via the local Ollama chat gate — real AI, $0, no hosted-model tokens. None if unreachable."""
+    engine = _OllamaEngine()
+    if not engine.available():
+        return None
+    model = _pick_gate_model(question, cfg)
+    try:
+        answer = engine.generate(
+            question, _RunSpec(model=model, n_gpu_layers=-1, n_ctx=8192,
+                               max_tokens=int(cfg.get("local_gate_max_tokens", 512))))
+    except Exception:
+        return None
+    if not answer:
+        return None
+    return build_response(
+        answer=answer, source="local_gate", confidence="medium", category="ai",
+        evidence=[{"source": f"ollama:{model}", "detail": "answered locally — $0, no hosted-model tokens"}],
+        suggested_questions=_SUGGESTED["unknown"], cfg=cfg,
+    )
+
+
 def _try_model_fallback(
     question: str,
     category: str,
@@ -1577,6 +1634,10 @@ def handle_api_ask(question: str, cfg: dict, selected_node_id: str | None = None
     else:
         local = answer_unknown(question, cfg)
 
+    if _should_try_local_gate(local, cfg):
+        gated = _answer_via_local_gate(question, cfg)
+        if gated is not None:
+            return gated
     if _should_try_fallback(local, cfg):
         return _try_model_fallback(question, category, local, cfg, selected_node_id)
     return local
