@@ -516,6 +516,10 @@ def run(
 
     os.environ["CITADEL_WORKSPACE"] = str(ws)
     os.environ.setdefault("CLAUDE_PROJECT_DIR", str(ws))
+    # Turn off the Claude Code TUI's mouse tracking at the source: with mouse mode "off" it never
+    # emits the SGR reports (ESC[<…M) that leak as text at the shell prompt, and the terminal's own
+    # scrollback keeps working. setdefault so a user who wants in-TUI mouse can opt back in (=0).
+    os.environ.setdefault("CLAUDE_CODE_DISABLE_MOUSE", "1")
     claude_bin = _find_claude_bin()
     if claude_bin:
         os.environ["CLAUDE_BIN"] = claude_bin

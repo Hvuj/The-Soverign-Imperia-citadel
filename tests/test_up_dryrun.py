@@ -1,7 +1,6 @@
 """tests/test_up_dryrun.py — up dry-run: banner printed, no daemons, no execvp."""
-from unittest.mock import patch, MagicMock
-
-import pytest
+import os
+from unittest.mock import patch
 
 from citadel.commands import up as up_mod
 
@@ -47,6 +46,30 @@ def test_up_dryrun_banner_lines(tmp_path, capsys):
     for line in _BANNER_LINES:
         if line.strip():
             assert line in captured.out, f"Banner line missing: {line!r}"
+
+
+def test_up_disables_claude_mouse_tracking(tmp_path, monkeypatch):
+    """up defaults CLAUDE_CODE_DISABLE_MOUSE=1 so the TUI never emits SGR mouse reports."""
+    monkeypatch.delenv("CLAUDE_CODE_DISABLE_MOUSE", raising=False)
+    with patch("citadel.commands._theme.time") as mock_time, \
+         patch("citadel.commands.up.start_daemon"), \
+         patch("citadel.commands.up.run_tool"), \
+         patch("os.execvp"):
+        mock_time.sleep = lambda _: None
+        up_mod.run("legion", str(tmp_path), dry_run=True, no_ui=True)
+    assert os.environ["CLAUDE_CODE_DISABLE_MOUSE"] == "1"
+
+
+def test_up_respects_explicit_mouse_optin(tmp_path, monkeypatch):
+    """A user who wants in-TUI mouse sets CLAUDE_CODE_DISABLE_MOUSE=0; up must not override it."""
+    monkeypatch.setenv("CLAUDE_CODE_DISABLE_MOUSE", "0")
+    with patch("citadel.commands._theme.time") as mock_time, \
+         patch("citadel.commands.up.start_daemon"), \
+         patch("citadel.commands.up.run_tool"), \
+         patch("os.execvp"):
+        mock_time.sleep = lambda _: None
+        up_mod.run("legion", str(tmp_path), dry_run=True, no_ui=True)
+    assert os.environ["CLAUDE_CODE_DISABLE_MOUSE"] == "0"
 
 
 def test_up_missing_workspace_errors(capsys):
