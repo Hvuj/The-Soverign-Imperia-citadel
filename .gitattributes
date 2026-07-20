@@ -1,0 +1,4 @@
+# Shell scripts must stay LF. core.autocrlf=true would otherwise check them out as CRLF on
+# Windows, and `citadel init` seeds these hooks/statusline verbatim into workspaces — a CRLF
+# hook dies under bash with `$'\r': command not found`.
+*.sh text eol=lf
