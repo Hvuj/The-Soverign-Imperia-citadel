@@ -317,6 +317,79 @@ def _cmd_do(args: argparse.Namespace) -> int:
     return 0 if result.status == "pass" else 1
 
 
+def _cmd_chat(args: argparse.Namespace) -> int:
+    """Interactive local-first chat gate — every message is answered by Ollama for $0.
+
+    The model is auto-picked per message: short, non-technical prompts get the fast small model,
+    substantive ones the capable coder model. Nothing reaches Claude unless you type an explicit
+    `/task <desc>`, which escalates that single turn to Claude Opus (and costs tokens).
+    """
+    import os
+    import re
+    import sys
+    from pathlib import Path
+
+    from citadel.services.execute.local.engine import OllamaEngine, RunSpec
+
+    _ = Path(args.workspace).resolve() if getattr(args, "workspace", None) else Path.cwd()
+    deep = getattr(args, "model", None) or os.environ.get("CITADEL_OLLAMA_MODEL", "qwen2.5-coder:7b")
+    fast = getattr(args, "fast_model", None) or os.environ.get("CITADEL_CHAT_FAST_MODEL", "qwen2.5:0.5b")
+
+    engine = OllamaEngine()
+    if not engine.available():
+        print("Ollama is not reachable — start it (`ollama serve`) or set CITADEL_OLLAMA_HOST.", file=sys.stderr)
+        return 1
+
+    # Route to the capable model whenever the prompt looks technical or non-trivial; short chit-chat gets
+    # the fast small model. This is the "auto-pick by intent" the operator chose: speed for trivia, quality
+    # for real work — all still local and $0.
+    substantive = re.compile(
+        r"\b(code|function|class|method|error|bug|traceback|refactor|implement|architect|design|api|regex"
+        r"|sql|async|thread|test|debug|deploy|why|how)\b", re.I)
+
+    def pick(prompt: str) -> str:
+        return deep if (substantive.search(prompt) or len(prompt.split()) > 8) else fast
+
+    print("◆ The Sovereign — local chat gate · Ollama, $0 · /task <desc> → Claude (tokens) · /exit to leave")
+    while True:
+        try:
+            line = input("\nyou▸ ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            return 0
+        if not line:
+            continue
+        if line in {"/exit", "/quit", ":q"}:
+            return 0
+        if line in {"/help", "?"}:
+            print("  /task <desc>   escalate one turn to Claude Opus (uses tokens)\n"
+                  "  /exit          leave the gate")
+            continue
+        if line.startswith("/task"):
+            desc = line[5:].strip()
+            _chat_escalate(desc) if desc else print("  usage: /task <what you want Claude to do>")
+            continue
+        model = pick(line)
+        try:
+            answer = engine.generate(line, RunSpec(model=model, n_gpu_layers=-1, n_ctx=8192, max_tokens=768))
+        except Exception as exc:
+            print(f"  [local engine error] {exc}", file=sys.stderr)
+            continue
+        print(f"◆ {model} · {'fast' if model == fast else 'deep'} · $0\n{answer}")
+
+
+def _chat_escalate(desc: str) -> None:
+    """Run one turn on Claude Opus (Tier-ultra) — the explicit, token-spending escalation from the gate."""
+    from citadel.services.execute import Blueprint, CloudClaudeExecutor
+
+    print("↑ escalating to Claude Opus (uses tokens) …")
+    result = CloudClaudeExecutor().execute(Blueprint(task_id="chat-task", instruction=desc, assigned_tier="ultra"))
+    if result.output:
+        print(result.output)
+    if result.status != "pass":
+        print(f"  [escalation {result.status}] {result.reason or ''}".rstrip())
+
+
 def _cmd_ask(args: argparse.Namespace) -> int:
     """Answer a question grounded in the local index — retrieval + answer are 0 tokens (local model).
 
@@ -632,6 +705,16 @@ def _build_parser() -> argparse.ArgumentParser:
     p_ask.add_argument("--workspace", default=None, help="Workspace path (default: current directory)")
     p_ask.add_argument("--model", default=None, help="Ollama model for the answer (or set CITADEL_OLLAMA_MODEL)")
     p_ask.set_defaults(func=_cmd_ask)
+
+    p_chat = sub.add_parser(
+        "chat",
+        help="Local-first chat gate — answers on Ollama for $0; /task escalates one turn to Claude",
+    )
+    p_chat.add_argument("--workspace", default=None, help="Workspace path (default: current directory)")
+    p_chat.add_argument("--model", default=None, help="Deep Ollama model (or set CITADEL_OLLAMA_MODEL)")
+    p_chat.add_argument("--fast-model", dest="fast_model", default=None,
+                        help="Fast Ollama model for trivial prompts (or set CITADEL_CHAT_FAST_MODEL)")
+    p_chat.set_defaults(func=_cmd_chat)
 
     p_optimize = sub.add_parser(
         "optimize",
