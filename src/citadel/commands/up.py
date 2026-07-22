@@ -9,20 +9,23 @@ package, so this command works in ANY workspace after `citadel init`.
 
 import json
 import os
+import re
 import shutil
 import socket
 import sys
 import time
 from pathlib import Path
 
+from citadel._terminal import reset_terminal_input_modes
 from citadel.commands import _daemons
 from citadel.commands._runner import (
+    _daemon_path,
     daemon_alive,
     run_tool,
     start_daemon,
 )
 from citadel.commands._theme import print_up_banner
-from citadel.paths import resolve_home
+from citadel.paths import is_unsafe_placement, resolve_home
 
 
 def _ensure_workspace_trusted(ws: Path) -> None:
@@ -51,8 +54,8 @@ def _ensure_workspace_trusted(ws: Path) -> None:
         data: dict = {}
         if cfg_path.exists():
             try:
-                data = json.loads(cfg_path.read_text())
-            except (json.JSONDecodeError, OSError):
+                data = json.loads(cfg_path.read_text(encoding="utf-8"))
+            except Exception:  # never block launch: cp1252/UnicodeDecodeError, JSON errors, IO — all tolerated
                 return
         entry = data.setdefault("projects", {}).setdefault(str(ws), {})
 
@@ -65,8 +68,8 @@ def _ensure_workspace_trusted(ws: Path) -> None:
         mcp_path = ws / ".mcp.json"
         if mcp_path.exists():
             try:
-                servers = list(json.loads(mcp_path.read_text()).get("mcpServers", {}))
-            except (json.JSONDecodeError, OSError):
+                servers = list(json.loads(mcp_path.read_text(encoding="utf-8")).get("mcpServers", {}))
+            except Exception:
                 servers = []
             if servers:
                 enabled = list(entry.get("enabledMcpjsonServers") or [])
@@ -132,8 +135,8 @@ def _seed_effort_level_setting(ws: Path, level: str) -> None:
         if not settings_path.exists():
             return
         try:
-            data = json.loads(settings_path.read_text())
-        except (json.JSONDecodeError, OSError):
+            data = json.loads(settings_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError, UnicodeDecodeError):
             return
         if not isinstance(data, dict):
             return
@@ -348,10 +351,12 @@ def _daemon_status(ws: Path) -> None:
     wi_alive = daemon_alive(".claude/state/workspace-intelligence/daemon.pid", ws)
     om_alive = daemon_alive(".claude/state/outcome-miner-daemon.pid", ws)
     gh_alive = daemon_alive(".claude/state/git-history-daemon.pid", ws)
-    def sym(b: bool) -> str: return "●" if b else "○"
+
+    def sym(b: bool) -> str:
+        return "●" if b else "○"
+
     print(
-        f"[12/14] daemon status: brain={sym(brain_alive)} wi={sym(wi_alive)} "
-        f"miner={sym(om_alive)} git={sym(gh_alive)}"
+        f"[12/14] daemon status: brain={sym(brain_alive)} wi={sym(wi_alive)} miner={sym(om_alive)} git={sym(gh_alive)}"
     )
 
 
@@ -371,6 +376,47 @@ def _ui_port() -> int:
     return int(os.environ.get("CITADEL_UI_PORT", "8765"))
 
 
+def _find_claude_bin() -> str | None:
+    """Locate Claude Code on PATH or in its standard Windows app bundles."""
+    override = os.environ.get("CLAUDE_BIN")
+    if override:
+        found = shutil.which(override)
+        if found:
+            return found
+        if Path(override).is_file():
+            return override
+
+    found = shutil.which("claude")
+    if found or sys.platform != "win32":
+        return found
+
+    home = Path(os.environ.get("USERPROFILE") or Path.home())
+    candidates = [
+        home / ".local" / "bin" / "claude.exe",
+        home / ".claude" / "local" / "claude.exe",
+        home / ".claude" / "bin" / "claude.exe",
+    ]
+    app_data = os.environ.get("APPDATA")
+    if app_data:
+        candidates.append(Path(app_data) / "npm" / "claude.cmd")
+    candidates.extend(home.glob(".vscode/extensions/anthropic.claude-code-*/resources/native-binary/claude.exe"))
+    local_app_data = os.environ.get("LOCALAPPDATA")
+    if local_app_data:
+        candidates.extend(
+            Path(local_app_data).glob("Packages/Claude_*/LocalCache/Roaming/Claude/claude-code/*/claude.exe")
+        )
+
+    existing = [candidate for candidate in candidates if candidate.is_file()]
+    if not existing:
+        return None
+
+    def version_key(candidate: Path) -> tuple[int, int, int]:
+        matches = re.findall(r"(?<!\d)(\d+)\.(\d+)\.(\d+)(?!\d)", str(candidate))
+        return tuple(map(int, matches[-1])) if matches else (0, 0, 0)
+
+    return str(max(existing, key=version_key))
+
+
 def _start_ui_server(ws: Path) -> str | None:
     """Start the UI server. Returns the ready URL, or None if it failed."""
     pid = start_daemon(
@@ -380,12 +426,15 @@ def _start_ui_server(ws: Path) -> str | None:
         pidfile_rel=".claude/state/citadel-ui-server.pid",
         out_rel=".claude/state/citadel-ui-server.out.log",
         err_rel=".claude/state/citadel-ui-server.err.log",
+        check_tool=False,
     )
     port = _ui_port()
     url = f"http://localhost:{port}/brain/graph.html"
-    if pid:
-        _wait_for_port("127.0.0.1", port, timeout=3.0)
+    if pid and _wait_for_port("127.0.0.1", port, timeout=3.0):
         status = f"pid={pid} url={url}"
+    elif pid:
+        status = f"pid={pid} NOT READY (optional; continuing)"
+        url = None
     else:
         status = "FAILED (optional)"
         url = None
@@ -415,7 +464,7 @@ def _run_health(ws: Path) -> str:
         )
         if ok and out_path.exists():
             try:
-                data = json.loads(out_path.read_text())
+                data = json.loads(out_path.read_text(encoding="utf-8"))
                 health = data.get("overall_status", "unknown")
                 checks = data.get("checks", [])
             except Exception:
@@ -431,10 +480,7 @@ def _run_health(ws: Path) -> str:
             key=lambda c: 0 if c.get("status") == "red" else 1,
         )[:3]
         if non_green:
-            detail = ", ".join(
-                f"{c['name']}: {c.get('details', c.get('status', '?'))}"
-                for c in non_green
-            )
+            detail = ", ".join(f"{c['name']}: {c.get('details', c.get('status', '?'))}" for c in non_green)
             print(f"[14/14] Citadel health: {health} ({detail})")
         else:
             print(f"[14/14] Citadel health: {health}")
@@ -453,28 +499,36 @@ def run(
 ) -> int:
     """Run `citadel up`. Returns exit code (0 = success)."""
 
-    ws = Path(workspace).expanduser().resolve() if workspace else resolve_home()
+    # abspath, not .resolve()/realpath: the latter walks OneDrive reparse points and can stall (see _runner)
+    ws = Path(os.path.abspath(Path(workspace).expanduser())) if workspace else resolve_home()
 
     if not ws.exists():
         print(f"ERROR: workspace '{ws}' does not exist.", file=sys.stderr)
         return 1
+
+    unsafe = is_unsafe_placement(ws)
+    if unsafe:
+        print(f"  [warn] workspace {unsafe}. Daemon starts are watchdog-guarded so `up` won't hang, but for "
+              "full reliability move the workspace off OneDrive (e.g. C:\\dev\\).")
 
     if not (ws / ".citadel" / "config.toml").exists() and not (ws / ".claude").exists():
         print("  [hint] workspace not initialized — run `citadel init` first for full brain setup")
 
     os.environ["CITADEL_WORKSPACE"] = str(ws)
     os.environ.setdefault("CLAUDE_PROJECT_DIR", str(ws))
+    # Turn off the Claude Code TUI's mouse tracking at the source: with mouse mode "off" it never
+    # emits the SGR reports (ESC[<…M) that leak as text at the shell prompt, and the terminal's own
+    # scrollback keeps working. setdefault so a user who wants in-TUI mouse can opt back in (=0).
+    os.environ.setdefault("CLAUDE_CODE_DISABLE_MOUSE", "1")
+    claude_bin = _find_claude_bin()
+    if claude_bin:
+        os.environ["CLAUDE_BIN"] = claude_bin
 
     effort_explicit = bool(
-        effort
-        or os.environ.get("CITADEL_EFFORT_LEVEL")
-        or os.environ.get("CLAUDE_CODE_EFFORT_LEVEL")
+        effort or os.environ.get("CITADEL_EFFORT_LEVEL") or os.environ.get("CLAUDE_CODE_EFFORT_LEVEL")
     )
     resolved_effort = (
-        effort
-        or os.environ.get("CITADEL_EFFORT_LEVEL")
-        or os.environ.get("CLAUDE_CODE_EFFORT_LEVEL")
-        or "auto"
+        effort or os.environ.get("CITADEL_EFFORT_LEVEL") or os.environ.get("CLAUDE_CODE_EFFORT_LEVEL") or "auto"
     )
     launch_model = os.environ.get("CLAUDE_MODEL", "opusplan")
     launch_perm = os.environ.get("CLAUDE_PERMISSION_MODE", "plan")
@@ -484,6 +538,9 @@ def run(
         pass
     else:
         os.chdir(ws)
+        # Clear any mouse-tracking mode a prior Claude Code session left on, so moving the
+        # mouse during this multi-second launch doesn't flood the shell with SGR reports.
+        reset_terminal_input_modes()
 
     print_up_banner()
 
@@ -494,13 +551,15 @@ def run(
 
     if restart:
         from citadel.commands.down import run as _destroy
+
         print("[restart] stopping existing Citadel processes before fresh start …")
         _destroy(workspace=str(ws))
         print()
 
     print(f"The Sovereign Imperia Citadel Z — workspace: {ws}\n")
 
-    (ws / ".claude" / "state").mkdir(parents=True, exist_ok=True)
+    state_dir = _daemon_path(ws, ".claude/state")
+    state_dir.mkdir(parents=True, exist_ok=True)
 
     _run_self_heal(ws)
 
@@ -531,15 +590,21 @@ def run(
     _build_brain_graph(ws)
     _build_sharded_brain_graph(ws)
     _run_provider_detection(ws)
-    _manifest = ws / ".claude" / "state" / "execution-manifest.json"
+    _manifest = state_dir / "execution-manifest.json"
     if not _manifest.exists():
         _manifest.parent.mkdir(parents=True, exist_ok=True)
-        _manifest.write_text(json.dumps({
-            "task_type": "initialization",
-            "selected_workflow": "init_workflow",
-            "required_agents": [],
-            "required_artifacts": [],
-        }, indent=2) + "\n")
+        _manifest.write_text(
+            json.dumps(
+                {
+                    "task_type": "initialization",
+                    "selected_workflow": "init_workflow",
+                    "required_agents": [],
+                    "required_artifacts": [],
+                },
+                indent=2,
+            )
+            + "\n"
+        )
     _run_mandatory_lint(ws)
     _daemon_status(ws)
 
@@ -561,11 +626,9 @@ def run(
 
     print()
 
-    claude_bin = shutil.which("claude")
     if not claude_bin:
         print(
-            "ERROR: `claude` not found on PATH.\n"
-            "Install it from https://claude.ai/code and ensure it is on your PATH.",
+            "ERROR: `claude` not found on PATH.\nInstall it from https://claude.ai/code and ensure it is on your PATH.",
             file=sys.stderr,
         )
         return 1
@@ -573,6 +636,16 @@ def run(
     model = os.environ.get("CLAUDE_MODEL", "opusplan")
     perm = os.environ.get("CLAUDE_PERMISSION_MODE", "plan")
     cmd = [claude_bin, "--model", model, "--permission-mode", perm, "--ide"] + (passthrough or [])
+    # Launch Claude Code from *inside* the workspace so it detects this as the project root and sets
+    # $CLAUDE_PROJECT_DIR for every hook + the statusLine. Without this the launch cwd stays wherever the
+    # user ran `citadel up`, $CLAUDE_PROJECT_DIR is empty, and every `bash "$CLAUDE_PROJECT_DIR/.claude/…"`
+    # hook + the 5s statusLine expands to a bogus `/.claude/…` and fails. (settings.json also carries baked
+    # absolute paths as a fallback — see init._bake_project_dir.)
+    try:
+        os.chdir(ws)
+    except OSError as exc:
+        print(f"  [warn] could not chdir to workspace ({exc}); hooks rely on baked settings.json paths",
+              file=sys.stderr)
     print(f"Launching: {' '.join(cmd)}")
     sys.stdout.flush()
     sys.stderr.flush()
@@ -586,8 +659,10 @@ def _print_dry_run_claude_cmd(passthrough: list[str] | None) -> None:
     effort = os.environ.get("CLAUDE_CODE_EFFORT_LEVEL")
     parts = ["claude", "--model", model, "--permission-mode", perm, "--ide"] + (passthrough or [])
     if effort is None:
-        print("[dry-run] CLAUDE_CODE_EFFORT_LEVEL=unset "
-              "(user-controlled via settings.local.json effortLevel; /effort may override)")
+        print(
+            "[dry-run] CLAUDE_CODE_EFFORT_LEVEL=unset "
+            "(user-controlled via settings.local.json effortLevel; /effort may override)"
+        )
     else:
         print(f"[dry-run] CLAUDE_CODE_EFFORT_LEVEL={effort}")
     print(f"[dry-run] would exec: {' '.join(parts)}")

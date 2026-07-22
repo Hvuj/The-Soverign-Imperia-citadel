@@ -114,6 +114,27 @@ def _cmd_workers(args: argparse.Namespace) -> int:
     )
 
 
+def _cmd_senate(args: argparse.Namespace) -> int:
+    from citadel.commands.senate import run
+    return run(getattr(args, "workspace", None), as_json=getattr(args, "as_json", False))
+
+
+def _cmd_bi(args: argparse.Namespace) -> int:
+    from citadel.commands.bi import run
+    return run(
+        args.bi_action,
+        getattr(args, "workspace", None),
+        province=getattr(args, "province", None),
+        name=getattr(args, "name", None),
+        as_json=getattr(args, "as_json", False),
+    )
+
+
+def _cmd_pandidakterion(args: argparse.Namespace) -> int:
+    from citadel.commands.pandidakterion import run
+    return run(getattr(args, "workspace", None), as_json=getattr(args, "as_json", False))
+
+
 def _cmd_brain(args: argparse.Namespace) -> int:
     """Rebuild the brain search index."""
     import os
@@ -274,7 +295,7 @@ def _cmd_do(args: argparse.Namespace) -> int:
         if getattr(args, "verify", None):
             verify = verify_by_command(shlex.split(args.verify))
         elif py_targets:
-            check = "import ast;" + "".join(f"ast.parse(open({t!r}).read());" for t in py_targets)
+            check = "import ast;" + "".join(f"ast.parse(open({t!r}, encoding='utf-8').read());" for t in py_targets)
             verify = verify_by_command([sys.executable, "-c", check])
         else:
             verify = None
@@ -294,6 +315,80 @@ def _cmd_do(args: argparse.Namespace) -> int:
     if result.status != "pass" and result.reason:
         print(f"  ({result.reason})")
     return 0 if result.status == "pass" else 1
+
+
+def _cmd_chat(args: argparse.Namespace) -> int:
+    """Interactive local-first chat gate — every message is answered by Ollama for $0.
+
+    The model is auto-picked per message: short, non-technical prompts get the fast small model,
+    substantive ones the capable coder model. Nothing reaches Claude unless you type an explicit
+    `/task <desc>`, which escalates that single turn to Claude Opus (and costs tokens).
+    """
+    import re
+    import sys
+    from pathlib import Path
+
+    from citadel.config import get_settings
+    from citadel.services.execute.local.engine import OllamaEngine, RunSpec
+
+    _ = Path(args.workspace).resolve() if getattr(args, "workspace", None) else Path.cwd()
+    settings = get_settings()
+    deep = getattr(args, "model", None) or settings.ollama_model
+    fast = getattr(args, "fast_model", None) or settings.chat_fast_model
+
+    engine = OllamaEngine()
+    if not engine.available():
+        print("Ollama is not reachable — start it (`ollama serve`) or set CITADEL_OLLAMA_HOST.", file=sys.stderr)
+        return 1
+
+    # Route to the capable model whenever the prompt looks technical or non-trivial; short chit-chat gets
+    # the fast small model. This is the "auto-pick by intent" the operator chose: speed for trivia, quality
+    # for real work — all still local and $0.
+    substantive = re.compile(
+        r"\b(code|function|class|method|error|bug|traceback|refactor|implement|architect|design|api|regex"
+        r"|sql|async|thread|test|debug|deploy|why|how)\b", re.I)
+
+    def pick(prompt: str) -> str:
+        return deep if (substantive.search(prompt) or len(prompt.split()) > 8) else fast
+
+    print("◆ The Sovereign — local chat gate · Ollama, $0 · /task <desc> → Claude (tokens) · /exit to leave")
+    while True:
+        try:
+            line = input("\nyou▸ ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            return 0
+        if not line:
+            continue
+        if line in {"/exit", "/quit", ":q"}:
+            return 0
+        if line in {"/help", "?"}:
+            print("  /task <desc>   escalate one turn to Claude Opus (uses tokens)\n"
+                  "  /exit          leave the gate")
+            continue
+        if line.startswith("/task"):
+            desc = line[5:].strip()
+            _chat_escalate(desc) if desc else print("  usage: /task <what you want Claude to do>")
+            continue
+        model = pick(line)
+        try:
+            answer = engine.generate(line, RunSpec(model=model, n_gpu_layers=-1, n_ctx=8192, max_tokens=768))
+        except Exception as exc:
+            print(f"  [local engine error] {exc}", file=sys.stderr)
+            continue
+        print(f"◆ {model} · {'fast' if model == fast else 'deep'} · $0\n{answer}")
+
+
+def _chat_escalate(desc: str) -> None:
+    """Run one turn on Claude Opus (Tier-ultra) — the explicit, token-spending escalation from the gate."""
+    from citadel.services.execute import Blueprint, CloudClaudeExecutor
+
+    print("↑ escalating to Claude Opus (uses tokens) …")
+    result = CloudClaudeExecutor().execute(Blueprint(task_id="chat-task", instruction=desc, assigned_tier="ultra"))
+    if result.output:
+        print(result.output)
+    if result.status != "pass":
+        print(f"  [escalation {result.status}] {result.reason or ''}".rstrip())
 
 
 def _cmd_ask(args: argparse.Namespace) -> int:
@@ -404,6 +499,43 @@ def _cmd_army(args: argparse.Namespace) -> int:
         print(f"  [{o.status}] t={o.task_id} ({o.tier}) — {o.output[:80].splitlines()[0] if o.output else ''}")
     print(f"  {passed}/{len(outcomes)} passed · {free} ran free on the local tier (0 cloud tokens)")
     return 0 if passed == len(outcomes) else 1
+
+
+def _cmd_consensus(args: argparse.Namespace) -> int:
+    from citadel.commands.consensus import run
+    return run(args)
+
+
+def _cmd_see(args: argparse.Namespace) -> int:
+    """Describe/analyze an image with a cloud vision model (NVIDIA VLM). Zero local cost."""
+    from citadel.services.execute.providers.vision import describe_image
+
+    prompt = " ".join(args.prompt).strip() if args.prompt else "Describe this image in detail."
+    out = describe_image(args.image, prompt, model=getattr(args, "model", None))
+    if out is None:
+        print("◆ The Sovereign — no vision provider available (set NVIDIA_API_KEY)")
+        return 1
+    print(out)
+    return 0
+
+
+def _cmd_image(args: argparse.Namespace) -> int:
+    """Generate an image from a text prompt (NVIDIA FLUX/SDXL) → a PNG artifact."""
+    import os
+    from pathlib import Path
+
+    from citadel.services.execute.providers.image_gen import generate_image
+
+    prompt = " ".join(args.prompt).strip()
+    out = args.out or str(Path(os.environ.get("CITADEL_WORKSPACE", ".")) / ".claude" / "state" / "images"
+                          / "generated.png")
+    model = getattr(args, "model", None) or "black-forest-labs/flux.1-schnell"
+    path = generate_image(prompt, out, model=model)
+    if path is None:
+        print("◆ The Sovereign — image generation unavailable (set NVIDIA_API_KEY)")
+        return 1
+    print(f"◆ The Sovereign — image written to {path}")
+    return 0
 
 
 def _cmd_mcp(args: argparse.Namespace) -> int:
@@ -575,6 +707,16 @@ def _build_parser() -> argparse.ArgumentParser:
     p_ask.add_argument("--model", default=None, help="Ollama model for the answer (or set CITADEL_OLLAMA_MODEL)")
     p_ask.set_defaults(func=_cmd_ask)
 
+    p_chat = sub.add_parser(
+        "chat",
+        help="Local-first chat gate — answers on Ollama for $0; /task escalates one turn to Claude",
+    )
+    p_chat.add_argument("--workspace", default=None, help="Workspace path (default: current directory)")
+    p_chat.add_argument("--model", default=None, help="Deep Ollama model (or set CITADEL_OLLAMA_MODEL)")
+    p_chat.add_argument("--fast-model", dest="fast_model", default=None,
+                        help="Fast Ollama model for trivial prompts (or set CITADEL_CHAT_FAST_MODEL)")
+    p_chat.set_defaults(func=_cmd_chat)
+
     p_optimize = sub.add_parser(
         "optimize",
         help="Optimize a file locally, verified before trust — your code is propose-only unless --apply",
@@ -615,11 +757,52 @@ def _build_parser() -> argparse.ArgumentParser:
                          help="Write .mcp.json for the native (stdio) or compose (HTTP + Docker) MCP stack")
     p_setup.set_defaults(func=_cmd_setup)
 
+    p_consensus = sub.add_parser(
+        "consensus",
+        help="Run many models on one task in parallel, cross-validate, reduce to one verified answer",
+    )
+    p_consensus.add_argument("task", nargs="+", help="The task to solve by multi-model consensus")
+    p_consensus.add_argument("--workspace", default=None, help="Workspace path (default: current directory)")
+    p_consensus.add_argument("--code", action="store_true", help="Verify each candidate as Python (ast.parse)")
+    p_consensus.add_argument("--no-local", dest="no_local", action="store_true", help="Skip the local Ollama member")
+    p_consensus.add_argument("--local-model", dest="local_model", default=None, help="Ollama model for the local member")
+    p_consensus.set_defaults(func=_cmd_consensus)
+
+    p_see = sub.add_parser("see", help="Describe/analyze an image with a cloud vision model (NVIDIA VLM)")
+    p_see.add_argument("image", help="Path to the image file")
+    p_see.add_argument("prompt", nargs="*", help="What to ask about the image (default: describe it)")
+    p_see.add_argument("--model", default=None, help="Vision model (default: the provider's VLM)")
+    p_see.set_defaults(func=_cmd_see)
+
+    p_image = sub.add_parser("image", help="Generate an image from a text prompt (NVIDIA FLUX/SDXL)")
+    p_image.add_argument("prompt", nargs="+", help="The image prompt")
+    p_image.add_argument("--out", default=None, help="Output PNG path")
+    p_image.add_argument("--model", default=None, help="Image model (default: black-forest-labs/flux.1-schnell)")
+    p_image.set_defaults(func=_cmd_image)
+
     p_mcp = sub.add_parser("mcp", help="Manage the Docker MCP retrieval stack")
     p_mcp.add_argument("mcp_action", choices=["up", "down", "status", "pin"],
                        help="up = start the stack + write compose .mcp.json; pin = digest-pin reference images")
     p_mcp.add_argument("--workspace", default=None, help="Workspace path (default: current directory)")
     p_mcp.set_defaults(func=_cmd_mcp)
+
+    p_senate = sub.add_parser("senate", help="Status of the Republic (brain · imperia · learning · bus · senate)")
+    p_senate.add_argument("--workspace", default=None, help="Workspace path (default: current directory)")
+    p_senate.add_argument("--json", dest="as_json", action="store_true", help="Emit JSON")
+    p_senate.set_defaults(func=_cmd_senate)
+
+    p_bi = sub.add_parser("bi", help="Agnostic domain-logic learning (Cartographer): learn · status · show")
+    p_bi.add_argument("bi_action", choices=["learn", "status", "show"], help="what to do")
+    p_bi.add_argument("name", nargs="?", default=None, help="unit name (for `show`)")
+    p_bi.add_argument("--workspace", default=None, help="Workspace path (default: current directory)")
+    p_bi.add_argument("--province", default=None, help="Province (default: workspace name)")
+    p_bi.add_argument("--json", dest="as_json", action="store_true", help="Emit JSON")
+    p_bi.set_defaults(func=_cmd_bi)
+
+    p_pand = sub.add_parser("pandidakterion", help="Status of the university governing learned domain logic")
+    p_pand.add_argument("--workspace", default=None, help="Workspace path (default: current directory)")
+    p_pand.add_argument("--json", dest="as_json", action="store_true", help="Emit JSON")
+    p_pand.set_defaults(func=_cmd_pandidakterion)
 
     p_doctor = sub.add_parser("doctor", help="Report what is installed / missing / how to fix")
     p_doctor.add_argument("--model", default=None, help="Local model to check for (default: qwen2.5-coder:7b)")

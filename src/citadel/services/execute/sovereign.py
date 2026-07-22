@@ -67,6 +67,8 @@ class SovereignRunner:
         classify: Callable[[str], str] | None = None,
         model_override: str | None = None,
         search: Callable[[str], str] | None = None,
+        ledger=None,
+        brain_arm: bool = True,
     ) -> None:
         self._local = local
         self._cloud = cloud
@@ -74,6 +76,30 @@ class SovereignRunner:
         self._classify = classify or classify_intent
         self._model_override = model_override
         self._search = search if search is not None else default_brain_search
+        self._ledger = ledger
+        self._brain_arm = brain_arm
+
+    def _get_ledger(self):
+        """The shared brain ledger (Redis-backed so every entry point shares it). None if unavailable."""
+        if self._ledger is None and self._brain_arm:
+            try:
+                from citadel.services.brain.learning import LearningStore
+
+                self._ledger = LearningStore(prefer_redis=True)
+            except Exception:
+                self._brain_arm = False
+        return self._ledger
+
+    def _arm(self, executor: Executor) -> Executor:
+        """Wrap an executor so it recalls prior lessons before generating and records its outcome after —
+        the everyday run path also learns into the one brain. The existing brain_query grounding handles the
+        code-context read half, so this adds only the learning loop (no double context injection)."""
+        ledger = self._get_ledger()
+        if ledger is None:
+            return executor
+        from citadel.services.brain.learning_executor import LearningExecutor
+
+        return LearningExecutor(executor, ledger)
 
     def _local_executor(self) -> Executor:
         if self._local is None:
@@ -101,8 +127,8 @@ class SovereignRunner:
         return sovereign_run(
             blueprint,
             intent,
-            local=self._local_executor(),
-            cloud=self._cloud_executor(),
+            local=self._arm(self._local_executor()),
+            cloud=self._arm(self._cloud_executor()),
             confidence=self._confidence,
             complexity=complexity,
         )

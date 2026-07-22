@@ -26,6 +26,10 @@ PIP_EXTRAS = [
     "numpy>=1.26",
     "httpx>=0.27",
     "mcp>=1.27,<2",
+    # Free-cloud provider federation (Groq + NVIDIA Build)
+    "openai>=1.40",
+    "python-dotenv>=1.0",
+    "truststore>=0.9",
 ]
 CITADEL_MCP_PORT = 8848
 
@@ -225,6 +229,20 @@ def _doctor_mcp(ws, mark) -> None:
         print("  [ok] MCP HTTP endpoint http://localhost:8848/mcp (Docker stack up)")
 
 
+def _doctor_providers(mark) -> None:
+    """Cloud AI providers (Groq/NVIDIA): key present? (masked, never the key itself)."""
+    try:
+        from citadel.services.execute.providers import PROVIDERS, resolve_provider_key
+        from citadel.services.execute.providers.keys import masked
+    except Exception:
+        print("  [--] cloud providers: openai/python-dotenv not installed (pip install '.[providers]')")
+        return
+    for name, spec in PROVIDERS.items():
+        key = resolve_provider_key(spec.key_env)
+        n_models = len(spec.text_models) + len(spec.vision_models) + len(spec.image_models)
+        print(f"  {mark(bool(key))} provider {name}: key {masked(key)} [{spec.key_env}] · {n_models} models wired")
+
+
 def run_doctor(args) -> int:
     import importlib.util
     from pathlib import Path
@@ -253,6 +271,7 @@ def run_doctor(args) -> int:
     ws = Path(getattr(args, "workspace", None) or ".").resolve()
     _doctor_redis(ws, mark)
     _doctor_mcp(ws, mark)
+    _doctor_providers(mark)
 
     unsafe = is_unsafe_placement(ws / ".claude")
     print(f"  {mark(unsafe is None)} state placement (masterplan §11.2)" + ("" if unsafe is None else f": {unsafe}"))

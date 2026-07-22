@@ -20,6 +20,8 @@ import time
 from datetime import UTC, datetime
 from pathlib import Path
 
+from citadel._process import pid_is_alive as process_is_alive
+
 ROOT = Path(os.environ.get("CITADEL_WORKSPACE") or Path(__file__).resolve().parents[1])
 STATE = ROOT / ".claude" / "state"
 WHAT_WORKED = ROOT / "docs" / "ai-context" / "what-worked.md"
@@ -116,6 +118,16 @@ def _append_if_new(path: Path, entry: str, header: str) -> bool:
     return True
 
 
+def _bridge_record(entry: str, *, success: bool, category: str) -> None:
+    """Best-effort: fold a mined outcome into the shared brain ledger (never fatal to the daemon)."""
+    try:
+        from _learning_bridge import record_outcome
+
+        record_outcome(entry[:200], "outcome-miner", success=success, category=category, summary=entry[:200])
+    except Exception:
+        pass
+
+
 def mine_once() -> dict:
     cursor = _load_cursor()
     task_lines, new_task_count = _read_new_lines(TASK_LEDGER, cursor["task_ledger_lines"])
@@ -132,9 +144,11 @@ def mine_once() -> dict:
     for entry in all_worked[:_MAX_ENTRIES_PER_RUN]:
         if _append_if_new(WHAT_WORKED, entry, "What Worked"):
             written_worked += 1
+            _bridge_record(entry, success=True, category="worked")
     for entry in all_failed[:_MAX_ENTRIES_PER_RUN]:
         if _append_if_new(WHAT_FAILED, entry, "What Did Not Work"):
             written_failed += 1
+            _bridge_record(entry, success=False, category="failed")
 
     cursor["task_ledger_lines"] = new_task_count
     cursor["agent_ledger_lines"] = new_agent_count
@@ -174,12 +188,10 @@ def status() -> None:
     print("# Outcome Miner Daemon")
     if PID_FILE.exists():
         pid = PID_FILE.read_text().strip()
-        alive = False
         try:
-            os.kill(int(pid), 0)
-            alive = True
-        except Exception:
-            pass
+            alive = process_is_alive(int(pid))
+        except ValueError:
+            alive = False
         print(f"pid: {pid}")
         print(f"running: {'yes' if alive else 'no'}")
     else:

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+source "$(dirname "${BASH_SOURCE[0]}")/_common.sh"
 # Stop hook — ordered BEFORE audit-gate.sh.
 set -uo pipefail
 INPUT="$(cat 2>/dev/null || true)"

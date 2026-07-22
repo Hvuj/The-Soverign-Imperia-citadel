@@ -18,6 +18,8 @@ from pathlib import Path
 
 from _brain_common import ROOT, STATE, load_json
 
+from citadel._process import pid_is_alive
+
 _DAEMON_SCRIPT = ROOT / "tools" / "incremental_brain_daemon.py"
 _SNAPSHOT_PATH = STATE / "incremental-brain-snapshot.json"
 _PID_PATH = STATE / "incremental-brain-daemon.pid"
@@ -72,13 +74,10 @@ def _check_daemon_pid(errors: list[str], warnings: list[str]) -> None:
         errors.append(f"Cannot read daemon pid from {_PID_PATH}")
         return
 
-    try:
-        import os
-        os.kill(pid, 0)
-    except ProcessLookupError:
-        warnings.append(f"WARN: daemon pid {pid} not alive — may need restart via scripts/incremental-brain-daemon-start.sh")
-    except PermissionError:
-        pass
+    if not pid_is_alive(pid):
+        warnings.append(
+            f"WARN: daemon pid {pid} not alive — may need restart via scripts/incremental-brain-daemon-start.sh"
+        )
 
 
 def _check_snapshot_freshness(errors: list[str], warnings: list[str]) -> None:

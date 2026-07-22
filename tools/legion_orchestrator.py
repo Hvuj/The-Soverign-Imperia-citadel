@@ -125,6 +125,23 @@ def _select_companies(companies: list[Company], needle: str | None) -> list[Comp
     return matched or companies
 
 
+def _brain_context_block(task: str) -> str:
+    """Best-effort cited context from the shared brain for this task, redacted for the cloud boundary
+    (workers are cloud agents). Empty string on any miss — never blocks a worker."""
+    try:
+        import os
+
+        from citadel.services.brain.access import BrainAccess
+        from citadel.services.brain.injection import render_capsule
+
+        ws = os.environ.get("CITADEL_WORKSPACE") or "."
+        capsule = BrainAccess.for_workspace(ws).context(task)
+        block = render_capsule(capsule, boundary="cloud")
+        return f"\n{block}\n" if block else ""
+    except Exception:
+        return ""
+
+
 def _worker_prompt(task: str, company: Company, role: str, *, read_only: bool = False) -> str:
     read_only_line = (
         "This is a READ-ONLY smoke check: do not edit, create, or delete any file; "
@@ -138,6 +155,7 @@ def _worker_prompt(task: str, company: Company, role: str, *, read_only: bool = 
         f"{ZERO_TOKEN_FIRST_MANDATE}\n\n"
         f"{SECURITY_MANDATE}\n\n"
         f"TASK: {task}\n"
+        f"{_brain_context_block(task)}"
     )
 
 

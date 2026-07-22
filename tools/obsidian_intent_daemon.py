@@ -34,6 +34,7 @@ import time
 from datetime import UTC, datetime
 from pathlib import Path
 
+from citadel._process import pid_is_alive as process_is_alive
 
 _ROOT: Path = Path(__file__).resolve().parents[1]
 _STATE: Path = _ROOT / ".claude" / "state"
@@ -335,12 +336,10 @@ def _run_status() -> None:
     print("# Obsidian Intent Daemon")
     if _PID.exists():
         pid = _PID.read_text().strip()
-        alive = False
         try:
-            os.kill(int(pid), 0)
-            alive = True
-        except Exception:
-            pass
+            alive = process_is_alive(int(pid))
+        except ValueError:
+            alive = False
         print(f"pid:     {pid}")
         print(f"running: {'yes' if alive else 'no (stale pid)'}")
     else:
@@ -455,7 +454,7 @@ def _run_test() -> None:  # noqa: C901 — intentional comprehensive test
             print(f"  FAIL  {e}", file=sys.stderr)
         sys.exit(1)
 
-    print(f"  PASS  all 8 self-tests passed")
+    print("  PASS  all 8 self-tests passed")
 
 
 def main() -> None:

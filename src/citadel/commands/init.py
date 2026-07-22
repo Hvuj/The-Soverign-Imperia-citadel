@@ -12,10 +12,84 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+from typing import Literal
 
+from citadel import __version__
 from citadel.commands._runner import _scripts_dir, _tools_dir, run_tool
 from citadel.mine_engine import mine_all
 from citadel.paths import HOME_DIR_NAME
+
+_INSTALL_VERSION_REL = Path(".citadel/version")
+_MarkerState = Literal["missing", "readable", "unreadable"]
+
+
+def _read_installed_version(ws: Path) -> tuple[_MarkerState, str | None]:
+    """Return the version marker state without confusing missing with unreadable."""
+    try:
+        version = (ws / _INSTALL_VERSION_REL).read_text(encoding="utf-8").strip()
+    except FileNotFoundError:
+        return "missing", None
+    except (OSError, UnicodeError):
+        return "unreadable", None
+    if not version or "\n" in version or "\r" in version:
+        return "unreadable", None
+    return "readable", version
+
+
+def _write_installed_version(ws: Path) -> None:
+    """Record the package version that most recently initialized *ws*."""
+    marker = ws / _INSTALL_VERSION_REL
+    marker.parent.mkdir(parents=True, exist_ok=True)
+    marker.write_text(f"{__version__}\n", encoding="utf-8")
+
+
+def _looks_like_legacy_install(ws: Path) -> bool:
+    """Recognize complete installs created before the version marker existed.
+
+    Re-running the old initializer is particularly unsafe on Windows because it
+    tears down and recreates the root junctions/hardlinks.  The three paths below
+    are written by separate initialization steps, so requiring all of them avoids
+    treating an empty or barely-started ``.citadel`` directory as installed.
+    """
+    citadel_dir = ws / ".citadel"
+    return (
+        (citadel_dir / "config.toml").is_file()
+        and (citadel_dir / ".claude").is_dir()
+        and (citadel_dir / "CLAUDE.md").is_file()
+    )
+
+
+def _guard_existing_install(ws: Path, *, force: bool) -> int | None:
+    """Report an existing install and return its exit code, or allow init."""
+    if force:
+        return None
+
+    marker_state, installed_version = _read_installed_version(ws)
+    if marker_state == "readable":
+        if installed_version == __version__:
+            print(f"[citadel init] already installed (version {__version__}): {ws}")
+            print("               Use `citadel init --force` to reinstall this workspace.")
+            return 0
+
+        print(f"ERROR: Citadel is already installed with a different version: {ws}", file=sys.stderr)
+        print(f"       installed version: {installed_version}", file=sys.stderr)
+        print(f"       current version:   {__version__}", file=sys.stderr)
+        print("       Use `citadel init --force` to reinstall this workspace.", file=sys.stderr)
+        return 1
+
+    if marker_state == "unreadable":
+        marker = ws / _INSTALL_VERSION_REL
+        print(f"ERROR: Citadel's installed-version marker is unreadable: {marker}", file=sys.stderr)
+        print(f"       current version: {__version__}", file=sys.stderr)
+        print("       Use `citadel init --force` to reinstall this workspace.", file=sys.stderr)
+        return 1
+
+    if _looks_like_legacy_install(ws):
+        print(f"[citadel init] already installed (version unknown; no version marker): {ws}")
+        print("               Use `citadel init --force` to reinstall this workspace.")
+        return 0
+
+    return None
 
 
 def _scaffold_citadel_dir(ws: Path) -> None:
@@ -47,7 +121,9 @@ def _write_config_toml(ws: Path, branch: str = "main", *, exclude_globs: list[st
     branches = [branch, *[b for b in default_branches if b != branch]]
     branches_toml = ", ".join(f'"{b}"' for b in branches)
     cfg.write_text(
-        f'[workspace]\nroot = "{ws}"\n\n'
+        # as_posix(): a Windows path in a double-quoted TOML string would make tomllib
+        # read backslash sequences (e.g. C:\Users → \U) as escapes and fail to parse.
+        f'[workspace]\nroot = "{ws.as_posix()}"\n\n'
         f'[index]\nrepo_include_globs = ["*"]\nrepo_exclude_globs = [{excludes_toml}]\n\n'
         f'[git]\nbranch = "{branch}"\nbranches = [{branches_toml}]\n'
     )
@@ -113,6 +189,27 @@ def _copy_claude_template(ws: Path, *, overwrite: bool = False) -> None:
                     dest.chmod(dest.stat().st_mode | 0o111)
 
 
+def _bake_project_dir(ws: Path) -> None:
+    """Replace ``$CLAUDE_PROJECT_DIR`` in the seeded settings.json with the absolute workspace path.
+
+    Claude Code expands the hook/statusLine command strings itself; if it launches without a detected
+    project it leaves ``$CLAUDE_PROJECT_DIR`` empty, so every ``bash "$CLAUDE_PROJECT_DIR/.claude/…"``
+    collapses to ``/.claude/…`` and fails on each tick (the SessionStart error + the 5s statusLine spam).
+    Baking the concrete path (bash-style forward slashes, e.g. ``C:/Users/…/citadel-home``) makes those
+    command paths resolve regardless of what Claude Code sets. Idempotent: once baked, no token remains.
+    The hook scripts' *internal* ``$CLAUDE_PROJECT_DIR`` is guaranteed separately by ``hooks/_common.sh``.
+    """
+    settings = ws / ".citadel" / ".claude" / "settings.json"
+    try:
+        text = settings.read_text(encoding="utf-8")
+    except OSError:
+        return
+    if "$CLAUDE_PROJECT_DIR" not in text:
+        return
+    bash_ws = os.path.abspath(ws).replace("\\", "/")
+    settings.write_text(text.replace("$CLAUDE_PROJECT_DIR", bash_ws), encoding="utf-8")
+
+
 def _copy_claude_md(ws: Path, *, overwrite: bool = False) -> None:
     """Write CLAUDE.md template into .citadel/CLAUDE.md in the workspace.
 
@@ -144,6 +241,32 @@ def _remove_link(path: Path) -> None:
         os.rmdir(str(path))
 
 
+def _is_link_like(path: Path) -> bool:
+    """Return whether *path* is a symlink or Windows directory junction."""
+    return path.is_symlink() or os.path.isjunction(path)
+
+
+def _normalized_link_target(link: Path, target: str | os.PathLike[str]) -> str:
+    """Normalize a link target lexically without traversing OneDrive paths."""
+    value = os.fspath(target)
+    if value.startswith("\\\\?\\UNC\\"):
+        value = "\\\\" + value[8:]
+    elif value.startswith("\\\\?\\"):
+        value = value[4:]
+    if not os.path.isabs(value):
+        value = os.path.join(os.fspath(link.parent), value)
+    return os.path.normcase(os.path.normpath(os.path.abspath(value)))
+
+
+def _link_points_to(link: Path, target: Path, expected_text: str) -> bool:
+    """Compare symlink/junction targets without ``resolve()`` filesystem walks."""
+    try:
+        existing = os.readlink(link)
+    except OSError:
+        return False
+    return existing == expected_text or _normalized_link_target(link, existing) == _normalized_link_target(link, target)
+
+
 def _create_link(root_path: Path, citadel_target: Path, rel_target: str) -> str:
     """Create a symlink pointing at *rel_target* (or a Windows fallback).
 
@@ -165,8 +288,9 @@ def _create_link(root_path: Path, citadel_target: Path, rel_target: str) -> str:
     if citadel_target.is_dir():
         try:
             import _winapi
+
             create_junction = getattr(_winapi, "CreateJunction")  # noqa: B009
-            create_junction(str(citadel_target.resolve()), str(root_path))
+            create_junction(os.path.abspath(citadel_target), str(root_path))
             return "junction"
         except (ImportError, OSError, AttributeError):
             shutil.copytree(str(citadel_target), str(root_path))
@@ -192,7 +316,7 @@ def _ensure_root_symlinks(ws: Path) -> None:
     directory junction for ``.claude`` and a hardlink/copy for ``CLAUDE.md``.
     """
     pairs = [
-        (ws / ".claude",   ws / ".citadel" / ".claude",   ".citadel/.claude"),
+        (ws / ".claude", ws / ".citadel" / ".claude", ".citadel/.claude"),
         (ws / "CLAUDE.md", ws / ".citadel" / "CLAUDE.md", ".citadel/CLAUDE.md"),
     ]
     for root_path, citadel_target, rel_target in pairs:
@@ -202,13 +326,8 @@ def _ensure_root_symlinks(ws: Path) -> None:
             else:
                 citadel_target.mkdir(parents=True, exist_ok=True)
 
-        if root_path.is_symlink():
-            existing = os.readlink(str(root_path))
-            try:
-                resolved_ok = Path(existing).resolve() == citadel_target.resolve()
-            except Exception:
-                resolved_ok = False
-            if existing == rel_target or resolved_ok:
+        if _is_link_like(root_path):
+            if _link_points_to(root_path, citadel_target, rel_target):
                 continue
             _remove_link(root_path)
         elif root_path.exists():
@@ -248,8 +367,8 @@ def _ensure_bundled_dir_symlinks(ws: Path) -> None:
         if not target.is_dir():
             continue
         link = ws / name
-        if link.is_symlink():
-            if link.resolve() == target.resolve():
+        if _is_link_like(link):
+            if _link_points_to(link, target, str(target)):
                 continue
             _remove_link(link)
         elif link.exists():
@@ -363,26 +482,32 @@ def _bootstrap_memory(ws: Path) -> None:
         ("what-worked.md", "# What Worked\n\n"),
         ("what-did-not-work.md", "# What Did Not Work\n\n"),
         ("feature-implementation-patterns.md", "# Feature Implementation Patterns\n\n"),
-        ("model-effort-outcomes.md", (
-            "# Model-Effort Outcome Log\n\n"
-            "Append-only. Used by effort-decider to improve future model selection.\n\n"
-            "## Entries\n\n"
-            "| date | task_type | model | effort | outcome | notes |\n"
-            "|------|-----------|-------|--------|---------|-------|\n"
-        )),
-        ("model-selection-policy.md", (
-            "# Model Selection Policy\n\n"
-            "Default: **Haiku + low effort**. Escalate only when evidence requires it.\n"
-            "See docs/ai-context/model-effort-outcomes.md for outcome history.\n\n"
-            "## Task → model\n\n"
-            "| task_type | model | effort |\n"
-            "|-----------|-------|--------|\n"
-            "| question, terminal_help, docstring_only | haiku | low |\n"
-            "| validation_only, docs_ingestion | haiku | low |\n"
-            "| test_creation, data_contract, sql | haiku | medium |\n"
-            "| feature_change, bug_fix, refactor | sonnet | medium |\n"
-            "| debugging, parcompute, bi_logic | sonnet | high |\n"
-        )),
+        (
+            "model-effort-outcomes.md",
+            (
+                "# Model-Effort Outcome Log\n\n"
+                "Append-only. Used by effort-decider to improve future model selection.\n\n"
+                "## Entries\n\n"
+                "| date | task_type | model | effort | outcome | notes |\n"
+                "|------|-----------|-------|--------|---------|-------|\n"
+            ),
+        ),
+        (
+            "model-selection-policy.md",
+            (
+                "# Model Selection Policy\n\n"
+                "Default: **Haiku + low effort**. Escalate only when evidence requires it.\n"
+                "See docs/ai-context/model-effort-outcomes.md for outcome history.\n\n"
+                "## Task → model\n\n"
+                "| task_type | model | effort |\n"
+                "|-----------|-------|--------|\n"
+                "| question, terminal_help, docstring_only | haiku | low |\n"
+                "| validation_only, docs_ingestion | haiku | low |\n"
+                "| test_creation, data_contract, sql | haiku | medium |\n"
+                "| feature_change, bug_fix, refactor | sonnet | medium |\n"
+                "| debugging, parcompute, bi_logic | sonnet | high |\n"
+            ),
+        ),
     ]:
         f = ai_ctx / fname
         if not f.exists():
@@ -413,6 +538,10 @@ def run(workspace: str, *, branch: str | None = None, force: bool = False) -> in
     ws = parent if parent.name == HOME_DIR_NAME else parent / HOME_DIR_NAME
     ws.mkdir(parents=True, exist_ok=True)
 
+    existing_install_result = _guard_existing_install(ws, force=force)
+    if existing_install_result is not None:
+        return existing_install_result
+
     if branch is None:
         branch = _detect_branch(parent) if (parent / ".git").exists() else "main"
 
@@ -429,6 +558,7 @@ def run(workspace: str, *, branch: str | None = None, force: bool = False) -> in
 
     print("[2/11] Installing .citadel/.claude/ hooks, agents, skills …")
     _copy_claude_template(ws, overwrite=force)
+    _bake_project_dir(ws)
     _copy_claude_md(ws, overwrite=force)
     _copy_mcp_json(ws, overwrite=force)
     _ensure_root_symlinks(ws)
@@ -440,7 +570,8 @@ def run(workspace: str, *, branch: str | None = None, force: bool = False) -> in
 
     print("[4/11] Building workspace intelligence indexes …")
     run_tool(
-        "build_workspace_intelligence_index.py", ws,
+        "build_workspace_intelligence_index.py",
+        ws,
         ["--workspace", str(ws)],
     )
 
@@ -472,22 +603,33 @@ def run(workspace: str, *, branch: str | None = None, force: bool = False) -> in
 
     print("[11/11] Seeding initial state …")
     import json as _json
+
     _manifest_path = ws / ".claude" / "state" / "execution-manifest.json"
     if not _manifest_path.exists():
         _manifest_path.parent.mkdir(parents=True, exist_ok=True)
-        _manifest_path.write_text(_json.dumps({
-            "task_type": "initialization",
-            "selected_workflow": "init_workflow",
-            "required_agents": [],
-            "required_artifacts": [],
-        }, indent=2) + "\n")
+        _manifest_path.write_text(
+            _json.dumps(
+                {
+                    "task_type": "initialization",
+                    "selected_workflow": "init_workflow",
+                    "required_agents": [],
+                    "required_artifacts": [],
+                },
+                indent=2,
+            )
+            + "\n"
+        )
 
     _ok = run_tool("scaffold_integrity_lint.py", ws, ["--workspace", str(ws), "--json"], quiet=True)
     print(f"[verify] scaffold integrity … {'OK' if _ok else 'ISSUES'}")
     if not _ok:
-        print("  [warn] scaffold incomplete — run `python tools/scaffold_integrity_lint.py "
-              f"--workspace {ws}` for details; some features may not work until resolved",
-              file=sys.stderr)
+        print(
+            "  [warn] scaffold incomplete — run `python tools/scaffold_integrity_lint.py "
+            f"--workspace {ws}` for details; some features may not work until resolved",
+            file=sys.stderr,
+        )
+    else:
+        _write_installed_version(ws)
 
     _CYAN = "\033[96m"
     _RESET = "\033[0m"

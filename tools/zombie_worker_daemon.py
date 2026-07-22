@@ -17,6 +17,8 @@ from pathlib import Path
 
 import zombie_worker
 
+from citadel._process import pid_is_alive as process_is_alive
+
 ROOT = Path(os.environ.get("CITADEL_WORKSPACE") or Path(__file__).resolve().parents[1])
 STATE = ROOT / ".claude" / "state"
 PID_FILE = STATE / "zombie-worker-daemon.pid"
@@ -42,12 +44,10 @@ def status() -> None:
     print("# Zombie Worker Daemon")
     if PID_FILE.exists():
         pid = PID_FILE.read_text().strip()
-        alive = False
         try:
-            os.kill(int(pid), 0)
-            alive = True
-        except (OSError, ValueError):
-            pass
+            alive = process_is_alive(int(pid))
+        except ValueError:
+            alive = False
         print(f"pid: {pid}\nrunning: {'yes' if alive else 'no'}")
     else:
         print("running: no")

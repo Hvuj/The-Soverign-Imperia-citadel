@@ -112,8 +112,11 @@ def workspace_root(explicit: str | Path | None = None) -> Path:
 
     cfg_path = _find_config_toml(Path.cwd())
     if cfg_path is not None:
-        with cfg_path.open("rb") as fh:
-            data = tomllib.load(fh)
+        try:
+            with cfg_path.open("rb") as fh:
+                data = tomllib.load(fh)
+        except (OSError, tomllib.TOMLDecodeError):
+            data = {}
         root = data.get("workspace", {}).get("root")
         if root:
             return Path(root).expanduser().resolve()
@@ -152,8 +155,11 @@ def resolve_home(explicit: str | Path | None = None) -> Path:
     cwd = Path.cwd()
     home_cfg = cwd / HOME_DIR_NAME / ".citadel" / "config.toml"
     if home_cfg.is_file():
-        with home_cfg.open("rb") as fh:
-            data = tomllib.load(fh)
+        try:
+            with home_cfg.open("rb") as fh:
+                data = tomllib.load(fh)
+        except (OSError, tomllib.TOMLDecodeError):
+            data = {}
         root = data.get("workspace", {}).get("root")
         if root:
             return Path(root).expanduser().resolve()
@@ -337,7 +343,9 @@ def resolve_redis_url(ws: Path | None = None, *, explicit: str | None = None) ->
     """
     if explicit:
         return explicit
-    env = os.environ.get("CITADEL_REDIS_URL")
+    from citadel.config import get_settings
+
+    env = get_settings().redis_url  # CITADEL_REDIS_URL via typed settings (None when unset)
     if env:
         return env
     try:

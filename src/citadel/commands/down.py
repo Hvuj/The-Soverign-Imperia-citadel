@@ -31,20 +31,29 @@ import os
 import sys
 from pathlib import Path
 
+from citadel._process import process_command_line
+from citadel._terminal import reset_terminal_input_modes
 from citadel.commands import _daemons
+from citadel.commands._runner import _daemon_path
 from citadel.paths import resolve_home
 
 GRACE_SECS = _daemons.GRACE_SECS
 
-_DAEMONS: list[tuple[str, str, bool]] = [
-    ("incremental brain daemon",       ".claude/state/incremental-brain-daemon.pid",           False),
-    ("workspace intelligence daemon",  ".claude/state/workspace-intelligence/daemon.pid",      False),
-    ("outcome miner daemon",           ".claude/state/outcome-miner-daemon.pid",               True),
-    ("git-history daemon",             ".claude/state/git-history-daemon.pid",                 False),
-    ("RAM cache daemon",               ".claude/state/ram-cache-daemon.pid",                   False),
-    ("bug-record daemon",              ".claude/state/bug-record-daemon.pid",                  False),
-    ("zombie worker daemon",           ".claude/state/zombie-worker-daemon.pid",               False),
-    ("Citadel UI server",                ".claude/state/citadel-ui-server.pid",                    False),
+_DAEMONS: list[tuple[str, str, bool, str]] = [
+    ("incremental brain daemon", ".claude/state/incremental-brain-daemon.pid", False, "incremental_brain_daemon"),
+    (
+        "workspace intelligence daemon",
+        ".claude/state/workspace-intelligence/daemon.pid",
+        False,
+        "workspace_intelligence_daemon",
+    ),
+    ("outcome miner daemon", ".claude/state/outcome-miner-daemon.pid", True, "outcome_miner_daemon"),
+    ("git-history daemon", ".claude/state/git-history-daemon.pid", False, "git_history_daemon"),
+    ("RAM cache daemon", ".claude/state/ram-cache-daemon.pid", False, "ram_cache_daemon"),
+    ("bug-record daemon", ".claude/state/bug-record-daemon.pid", False, "bug_record_daemon"),
+    ("zombie worker daemon", ".claude/state/zombie-worker-daemon.pid", False, "zombie_worker_daemon"),
+    ("embedder daemon", ".claude/state/embedder-daemon.pid", False, "embedder_daemon"),
+    ("Citadel UI server", ".claude/state/citadel-ui-server.pid", False, "citadel_ui_server"),
 ]
 
 
@@ -64,8 +73,8 @@ def run(workspace: str | None = None) -> int:
     print("[citadel down] stopping all Citadel processes …")
 
     entries: list[tuple[str, Path, int]] = []
-    for label, pidfile_rel, use_sentinel in _DAEMONS:
-        pidfile = ws / pidfile_rel
+    for label, pidfile_rel, use_sentinel, expected_stem in _DAEMONS:
+        pidfile = _daemon_path(ws, pidfile_rel)
         if use_sentinel:
             sentinel = pidfile.parent / "outcome-miner-daemon.stop"
             with contextlib.suppress(OSError):
@@ -75,10 +84,23 @@ def run(workspace: str | None = None) -> int:
             print(f"  {label}: not running (no pidfile)")
             continue
         try:
-            pid = int(pidfile.read_text().strip())
+            pid = int(pidfile.read_text(encoding="utf-8").strip())
         except (ValueError, OSError):
             pidfile.unlink(missing_ok=True)
             print(f"  {label}: stale pidfile removed")
+            continue
+        if pid <= 0:
+            pidfile.unlink(missing_ok=True)
+            print(f"  {label}: invalid pidfile removed (pid={pid})")
+            continue
+        command_line = process_command_line(pid)
+        if command_line is None:
+            pidfile.unlink(missing_ok=True)
+            print(f"  {label}: uninspectable pidfile removed (pid={pid})")
+            continue
+        if expected_stem not in command_line:
+            pidfile.unlink(missing_ok=True)
+            print(f"  {label}: stale pidfile removed (pid={pid} was reused)")
             continue
         entries.append((label, pidfile, pid))
 
@@ -101,5 +123,8 @@ def run(workspace: str | None = None) -> int:
     else:
         print("  none found")
 
+    # The session just stopped may have left the terminal in mouse-tracking mode; clear it so
+    # the returning shell prompt doesn't echo every mouse move as SGR text.
+    reset_terminal_input_modes()
     print("[citadel down] done — machine is clean for a fresh `citadel up`")
     return 0

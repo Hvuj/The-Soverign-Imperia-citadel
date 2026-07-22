@@ -216,3 +216,7 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Generated Citadel workspace at the repo root (created by running `citadel up` from here).
+# It is runtime instance state, not source — its .citadel/config.toml embeds the absolute path.
+/citadel-home/

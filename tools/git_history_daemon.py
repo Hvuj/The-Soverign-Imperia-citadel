@@ -24,8 +24,11 @@ import time
 from pathlib import Path
 
 from citadel import paths as vp
+from citadel._process import no_window_creationflags
 from citadel.commands._runner import _tools_dir
 from citadel.mine_engine import mine_all, touched_repos
+
+_NO_WINDOW = no_window_creationflags()
 
 DEFAULT_POLL_INTERVAL = 300
 SWEEP_INTERVAL = 86_400
@@ -92,7 +95,7 @@ def _rebuild_commit_index(quiet: bool) -> None:
         return
     args = [sys.executable, str(tool)] + (["--quiet"] if quiet else [])
     try:
-        subprocess.run(args, check=False)
+        subprocess.run(args, check=False, creationflags=_NO_WINDOW)
     except OSError as exc:
         _log(f"commit-index rebuild failed: {exc}", quiet)
 
@@ -109,7 +112,7 @@ def _rebuild_sharded_graph(quiet: bool) -> None:
         return
     args = [sys.executable, str(tool), "--build"]
     try:
-        subprocess.run(args, check=False, capture_output=quiet)
+        subprocess.run(args, check=False, capture_output=quiet, creationflags=_NO_WINDOW)
     except OSError as exc:
         _log(f"sharded-graph rebuild failed: {exc}", quiet)
 

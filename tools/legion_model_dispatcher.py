@@ -27,6 +27,7 @@ Output:  string response from claude-opus-4-8 (or model override)
 
 import argparse
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -34,7 +35,7 @@ import tempfile
 from collections.abc import Iterator
 from pathlib import Path
 
-_ROOT = Path(__file__).parent.parent.resolve()
+_ROOT = Path(os.environ.get("CITADEL_WORKSPACE") or os.path.abspath(Path(__file__).parent.parent))
 SPINE_PATH = _ROOT / ".claude" / "state" / "corporate-spine.md"
 CAPSULE_PATH = _ROOT / ".claude" / "state" / "context-capsule.json"
 

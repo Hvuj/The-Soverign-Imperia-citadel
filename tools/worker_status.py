@@ -25,7 +25,6 @@ Usage:
 
 import argparse
 import json
-import os
 import sys
 import time
 from pathlib import Path
@@ -36,6 +35,7 @@ if str(_TOOLS_DIR) not in sys.path:
 
 import legion_run_state as _lrs  # noqa: E402
 
+from citadel._process import pid_is_alive as process_is_alive  # noqa: E402
 from citadel.paths import claude_dir, workspace_root  # noqa: E402
 
 DAEMON_PIDFILES: dict[str, str] = {
@@ -67,9 +67,7 @@ def _pid_alive(pidfile: Path) -> int | None:
         pid = int(pidfile.read_text().strip())
     except (OSError, ValueError):
         return None
-    try:
-        os.kill(pid, 0)
-    except (ProcessLookupError, PermissionError):
+    if not process_is_alive(pid):
         return None
     return pid
 

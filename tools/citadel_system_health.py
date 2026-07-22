@@ -15,12 +15,14 @@ import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
+from citadel._process import pid_is_alive as process_is_alive
+
 ROOT = Path(os.environ.get("CITADEL_WORKSPACE") or Path(__file__).resolve().parents[1])
 STATE = ROOT / ".claude" / "state"
 SEARCH_STATE = STATE / "brain-search"
 
-_venv_py = ROOT / ".venv" / "bin" / "python"
-PYTHON = str(_venv_py) if _venv_py.is_file() else "python3"
+_venv_pythons = (ROOT / ".venv" / "Scripts" / "python.exe", ROOT / ".venv" / "bin" / "python")
+PYTHON = str(next((path for path in _venv_pythons if path.is_file()), Path(sys.executable)))
 
 CRITICAL = {
     "incremental_brain_daemon",
@@ -59,13 +61,9 @@ def pid_alive(pid_file: Path) -> tuple[bool, str]:
         pid = int(pid_file.read_text().strip())
     except (ValueError, OSError):
         return False, "pid file unreadable"
-    try:
-        os.kill(pid, 0)
+    if process_is_alive(pid):
         return True, f"pid={pid} alive"
-    except ProcessLookupError:
-        return False, f"pid={pid} not running"
-    except PermissionError:
-        return True, f"pid={pid} alive (permission check)"
+    return False, f"pid={pid} not running"
 
 
 def check_incremental_brain_daemon() -> dict:
@@ -186,7 +184,7 @@ def check_workspace_index() -> dict:
 
     try:
         bm = json.loads(build_meta.read_text())
-        wi = json.loads(ws_index.read_text())
+        json.loads(ws_index.read_text())
     except json.JSONDecodeError as exc:
         return _check("workspace_index", "yellow", f"workspace index invalid JSON: {exc}",
                       str(build_meta))
@@ -297,7 +295,8 @@ def check_citadel_ask_fallback_status() -> dict:
                      "fallback_message": "model fallback disabled (intentional)"})
         return base
 
-    cli_ok = _shutil.which("claude") is not None
+    configured_bin = os.environ.get("CLAUDE_BIN")
+    cli_ok = bool(configured_bin and Path(configured_bin).is_file()) or _shutil.which("claude") is not None
     sdk_ok = _ilu.find_spec("anthropic") is not None
 
     raw_provider = cfg.get("model_fallback_provider", "auto")
@@ -419,9 +418,10 @@ def check_claude_code_available() -> dict:
     if not provider_cfg.get("enabled", True):
         return _check("claude_code_available", "green", "claude_code disabled in config (intentional)", "")
     cmd = provider_cfg.get("command", "claude") or "claude"
-    found = shutil.which(cmd)
+    configured_bin = os.environ.get("CLAUDE_BIN")
+    found = configured_bin if configured_bin and Path(configured_bin).is_file() else shutil.which(cmd)
     if found:
-        return _check("claude_code_available", "green", f"{cmd!r} found on PATH", found)
+        return _check("claude_code_available", "green", f"{cmd!r} available", found)
     return _check("claude_code_available", "yellow", f"{cmd!r} not found on PATH — provider unavailable", "")
 
 

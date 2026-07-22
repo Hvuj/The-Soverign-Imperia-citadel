@@ -4,18 +4,67 @@ All paths are resolved relative to the installed sovereign-imperia-citadel packa
 these helpers work from ANY workspace after `citadel init`.
 """
 
+import contextlib
+import functools
 import os
 import subprocess
 import sys
+import threading
 from pathlib import Path
 
+from citadel._process import no_window_creationflags, pid_is_alive, process_command_line
 
+# A single blocking filesystem op under OneDrive (a `mkdir`/`open` on a dehydrated cloud placeholder) can
+# stall indefinitely — no exception, just a hang. `try/except` can't catch that. So daemon starts run under a
+# hard wall-clock watchdog: if one stalls past this budget, it is abandoned and skipped so `citadel up` still
+# completes (daemons are best-effort). The durable cure is not hosting the workspace under OneDrive.
+_DAEMON_START_TIMEOUT = 15.0
+# Directories created this process — skip redundant mkdir/stat probes on the OneDrive hot path.
+_created_dirs: set[str] = set()
+
+
+def _ensure_dir(path: Path) -> None:
+    """`mkdir -p`, memoized: a directory made once this process is never re-probed (fewer OneDrive stalls)."""
+    key = os.path.abspath(path)
+    if key in _created_dirs:
+        return
+    path.mkdir(parents=True, exist_ok=True)
+    _created_dirs.add(key)
+
+
+def _package_root() -> Path:
+    """This file's absolute path WITHOUT `os.path.realpath`.
+
+    `Path(__file__).resolve()` walks and resolves every path component (reparse points / OneDrive cloud
+    placeholders), which can BLOCK indefinitely when the tree lives under a OneDrive-redirected folder. We
+    only need the package directory to locate bundled `tools/`/`scripts/`, not symlink resolution — so use
+    the pure-string `os.path.abspath` (never touches the filesystem)."""
+    return Path(os.path.abspath(__file__))
+
+
+def _child_env(ws: Path) -> dict:
+    """Environment for spawned tools/daemons: the workspace pointer + forced UTF-8.
+
+    Child processes do NOT inherit the parent's `sys.stdout.reconfigure(utf-8)` from `cli.main()`, and on
+    Windows a subprocess defaults to the legacy cp1252 codepage — so a tool that prints a ✓/✗/● icon dies
+    with UnicodeEncodeError. `PYTHONUTF8=1` (+ `PYTHONIOENCODING`) makes every child emit UTF-8, whether its
+    stdout is a console, a pipe, or a log file."""
+    return {
+        **os.environ,
+        "CITADEL_WORKSPACE": str(ws),
+        "PYTHONUTF8": "1",
+        "PYTHONIOENCODING": "utf-8",
+    }
+
+
+@functools.cache
 def _tools_dir() -> Path:
     """Return the directory containing bundled sovereign-imperia-citadel tools.
 
     Works for both wheel installs (tools at citadel/tools/) and editable/src
     installs (tools at <repo>/tools/). Callers use warn-and-continue semantics for
-    missing individual tools, so returning a non-existent path is acceptable.
+    missing individual tools, so returning a non-existent path is acceptable. Cached: the answer is constant
+    for the process, so the filesystem is probed once, not on every daemon/tool spawn.
 
     Layout mapping:
       Wheel:    <site-packages>/citadel/commands/_runner.py
@@ -23,7 +72,7 @@ def _tools_dir() -> Path:
       Editable: <repo>/src/citadel/commands/_runner.py
                 parents[3] = <repo>/                          ← has tools/ here
     """
-    here = Path(__file__).resolve()
+    here = _package_root()
     for cand in (here.parents[1], here.parents[3]):
         td = cand / "tools"
         if td.is_dir():
@@ -31,12 +80,13 @@ def _tools_dir() -> Path:
     return here.parents[1] / "tools"
 
 
+@functools.cache
 def _scripts_dir() -> Path:
     """Return the directory containing bundled sovereign-imperia-citadel scripts.
 
-    Same wheel/editable resolution as `_tools_dir()`, for `scripts/`.
+    Same wheel/editable resolution as `_tools_dir()`, for `scripts/`. Cached (constant per process).
     """
-    here = Path(__file__).resolve()
+    here = _package_root()
     for cand in (here.parents[1], here.parents[3]):
         sd = cand / "scripts"
         if sd.is_dir():
@@ -61,7 +111,7 @@ def run_tool(
         print(f"  [warn] bundled tool not found: tools/{name}", file=sys.stderr)
         return False
 
-    env = {**os.environ, "CITADEL_WORKSPACE": str(ws)}
+    env = _child_env(ws)
     cmd = [sys.executable, str(tool)] + (extra_args or [])
     try:
         result = subprocess.run(
@@ -70,6 +120,7 @@ def run_tool(
             env=env,
             capture_output=quiet,
             timeout=timeout,
+            creationflags=no_window_creationflags(),
         )
         if result.returncode != 0:
             print(f"  [warn] tools/{name} exited {result.returncode}", file=sys.stderr)
@@ -93,38 +144,55 @@ def _pid_is_our_daemon(pid: int, tool_name: str) -> bool:
     so this never blocks a false negative — it only catches obvious PID reuse.
     """
     stem = tool_name.removesuffix(".py")
-    try:
-        cmdline = Path(f"/proc/{pid}/cmdline").read_bytes().replace(b"\x00", b" ").decode(errors="replace")
-        return stem in cmdline
-    except OSError:
-        pass
-    import subprocess
-    try:
-        r = subprocess.run(
-            ["ps", "-p", str(pid), "-o", "args="],
-            capture_output=True, timeout=2,
-        )
-        return stem in r.stdout.decode(errors="replace")
-    except Exception:
-        return True
+    cmdline = process_command_line(pid)
+    if cmdline is None:
+        return sys.platform != "win32"
+    return stem in cmdline
 
 
 def _low_priority_spawn_kwargs() -> dict:
-    """Popen kwargs that start a daemon below normal priority (Windows only here)."""
+    """Popen kwargs that run Windows daemons hidden, at below-normal priority, in their own group.
+
+    ``CREATE_NO_WINDOW`` (was ``DETACHED_PROCESS``): a detached process has no console, so each Python tool
+    a daemon shells out to popped a fresh visible window — ``CREATE_NO_WINDOW`` gives a hidden console
+    instead. ``CREATE_NEW_PROCESS_GROUP`` is kept so ``citadel down`` can group-signal the daemon."""
     if sys.platform == "win32":
-        flags = getattr(subprocess, "BELOW_NORMAL_PRIORITY_CLASS", 0)
+        flags = (
+            getattr(subprocess, "BELOW_NORMAL_PRIORITY_CLASS", 0)
+            | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+            | no_window_creationflags()
+        )
         if flags:
-            return {"creationflags": flags}
+            return {"creationflags": flags, "stdin": subprocess.DEVNULL}
     return {}
 
 
 def _lower_priority(pid: int) -> None:
     """Nice a spawned daemon down on POSIX so background work never starves the foreground."""
     if sys.platform != "win32" and hasattr(os, "setpriority"):
-        try:
+        with contextlib.suppress(OSError, PermissionError):
             os.setpriority(os.PRIO_PROCESS, pid, 10)
-        except (OSError, PermissionError):
-            pass
+
+
+def _daemon_path(ws: Path, relative: str) -> Path:
+    """Return a daemon pid/log path without traversing the root ``.claude`` link.
+
+    New installations keep the real Claude directory at
+    ``.citadel/.claude`` and expose root ``.claude`` as a symlink (POSIX) or
+    junction (Windows).  Writing daemon state through the Windows junction can
+    block under OneDrive and has caused ``citadel up`` to hang while starting
+    the UI server.  Initialized workspaces always have the managed directory,
+    so map it lexically without an ``exists()``/``is_dir()`` probe on the hot
+    startup path.
+
+    This is intentionally a lexical mapping: resolving either path would walk
+    the junction and reintroduce the problem this helper avoids.
+    """
+    rel = Path(relative)
+    parts = rel.parts
+    if not rel.is_absolute() and parts[:1] == (".claude",):
+        return (ws / ".citadel" / ".claude").joinpath(*parts[1:])
+    return ws / rel
 
 
 def start_daemon(
@@ -134,37 +202,84 @@ def start_daemon(
     pidfile_rel: str,
     out_rel: str,
     err_rel: str,
+    *,
+    check_tool: bool = True,
 ) -> int | None:
     """Start a daemon tool in a detached subprocess if not already running.
 
-    Returns the PID of the (new or existing) daemon, or None on failure.
+    Returns the PID of the (new or existing) daemon, or None on failure. Runs under a wall-clock watchdog: if
+    the start blocks past ``_DAEMON_START_TIMEOUT`` (a OneDrive placeholder stall that no ``try/except`` can
+    catch), it is abandoned and skipped so ``citadel up`` never hangs. Callers treat ``None`` as a non-fatal
+    skip.
+
     - Idempotent: if the pidfile exists and the process is alive, returns its PID.
-    - State files are written to ``<ws>/<pidfile_rel>`` etc.
+    - State files are written to the initialized workspace's managed ``.citadel/.claude`` directory,
+      bypassing the root symlink/junction.
+    - ``check_tool=False`` skips a redundant pre-spawn stat for callers that must avoid OneDrive stalls.
     - Missing optional deps (watchdog, anthropic) → warning, not an error.
     """
+    result: dict[str, int | None] = {"pid": None}
+
+    def _work() -> None:
+        with contextlib.suppress(Exception):  # inner already warns; the watchdog owns skip semantics
+            result["pid"] = _start_daemon_inner(
+                tool_name, ws, daemon_args, pidfile_rel, out_rel, err_rel, check_tool=check_tool
+            )
+
+    worker = threading.Thread(target=_work, name=f"start-daemon-{tool_name}", daemon=True)
+    worker.start()
+    worker.join(_DAEMON_START_TIMEOUT)
+    if worker.is_alive():
+        print(
+            f"  [warn] {tool_name} start stalled (>{_DAEMON_START_TIMEOUT:.0f}s, likely a OneDrive filesystem "
+            "stall) — skipping",
+            file=sys.stderr,
+        )
+        return None
+    return result["pid"]
+
+
+def _start_daemon_inner(
+    tool_name: str,
+    ws: Path,
+    daemon_args: list[str],
+    pidfile_rel: str,
+    out_rel: str,
+    err_rel: str,
+    *,
+    check_tool: bool = True,
+) -> int | None:
+    """The actual spawn — run inside the watchdog thread by ``start_daemon``."""
     tool = _tools_dir() / tool_name
-    if not tool.exists():
+    if check_tool and not tool.exists():
         print(f"  [warn] daemon tool not found: tools/{tool_name}", file=sys.stderr)
         return None
 
-    pidfile = ws / pidfile_rel
-    pidfile.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        pidfile = _daemon_path(ws, pidfile_rel)
+        _ensure_dir(pidfile.parent)
+    except OSError as exc:
+        print(f"  [warn] {tool_name} state path unavailable: {exc}", file=sys.stderr)
+        return None
 
     if pidfile.exists():
         try:
-            existing_pid = int(pidfile.read_text().strip())
-            os.kill(existing_pid, 0)
-            if _pid_is_our_daemon(existing_pid, tool_name):
+            existing_pid = int(pidfile.read_text(encoding="utf-8").strip())
+            if pid_is_alive(existing_pid) and _pid_is_our_daemon(existing_pid, tool_name):
                 return existing_pid
-        except (ValueError, ProcessLookupError, PermissionError):
+        except (ValueError, OSError):
             pass
 
-    out_path = ws / out_rel
-    err_path = ws / err_rel
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    err_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        out_path = _daemon_path(ws, out_rel)
+        err_path = _daemon_path(ws, err_rel)
+        _ensure_dir(out_path.parent)
+        _ensure_dir(err_path.parent)
+    except OSError as exc:
+        print(f"  [warn] {tool_name} log path unavailable: {exc}", file=sys.stderr)
+        return None
 
-    env = {**os.environ, "CITADEL_WORKSPACE": str(ws)}
+    env = _child_env(ws)
     cmd = [sys.executable, str(tool), *daemon_args]
 
     try:
@@ -191,12 +306,11 @@ def start_daemon(
 
 def daemon_alive(pidfile_rel: str, ws: Path) -> bool:
     """Return True if the daemon described by ``pidfile_rel`` is running."""
-    pidfile = ws / pidfile_rel
+    pidfile = _daemon_path(ws, pidfile_rel)
     if not pidfile.exists():
         return False
     try:
-        pid = int(pidfile.read_text().strip())
-        os.kill(pid, 0)
-        return True
-    except (ValueError, ProcessLookupError, PermissionError):
+        pid = int(pidfile.read_text(encoding="utf-8").strip())
+    except (ValueError, OSError):
         return False
+    return pid_is_alive(pid)

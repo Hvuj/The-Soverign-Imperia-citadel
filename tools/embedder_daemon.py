@@ -20,6 +20,7 @@ _SRC = _TOOLS.parent / "src"
 if _SRC.is_dir() and str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
+from citadel._process import pid_is_alive as process_is_alive  # noqa: E402
 from citadel.services.retrieval.worker import EmbedderWorker  # noqa: E402
 
 _WS = Path(os.environ.get("CITADEL_WORKSPACE", ".")).resolve()
@@ -125,12 +126,10 @@ def status() -> None:
     print("# Embedder Z-Worker")
     if _PID.exists():
         pid = _PID.read_text().strip()
-        alive = False
         try:
-            os.kill(int(pid), 0)
-            alive = True
-        except Exception:
-            pass
+            alive = process_is_alive(int(pid))
+        except ValueError:
+            alive = False
         print(f"pid: {pid}")
         print(f"running: {'yes' if alive else 'no'}")
     else:

@@ -9,6 +9,10 @@ from datetime import UTC, datetime
 
 from _brain_common import ROOT, STATE, load_json, write_json
 
+from citadel._process import no_window_creationflags, pid_is_alive
+
+_NO_WINDOW = no_window_creationflags()
+
 CFG=ROOT/".claude/daemon/incremental-brain-config.json"; SNAP=STATE/"incremental-brain-snapshot.json"; PID=STATE/"incremental-brain-daemon.pid"; STOP=STATE/"incremental-brain-daemon.stop"; EVENTS=STATE/"incremental-brain-events.ndjson"; LOG=STATE/"incremental-brain-daemon.log"
 
 
@@ -42,7 +46,7 @@ def sync(paths):
     if not paths: return
     structural = [p for p in paths if any(s in p for s in ["docs/brain/nodes", ".claude/agents", ".claude/brain/graph-aware-config", ".claude/brain/workflow-manifest-config", "docs/brain/nodes/units"])]
     if structural:
-        subprocess.run([sys.executable,"tools/build_brain_search_index.py","--quiet"],cwd=ROOT)
+        subprocess.run([sys.executable,"tools/build_brain_search_index.py","--quiet"],cwd=ROOT,creationflags=_NO_WINDOW)
     else:
         path_idx_file = STATE / "brain-search" / "path-to-nodes.json"
         try:
@@ -51,10 +55,23 @@ def sync(paths):
             for p in paths:
                 dirty.update(path_idx.get(p, []))
             for nid in list(dirty)[:20]:
-                subprocess.run([sys.executable,"tools/build_capsule_cache.py","--quiet","--node",nid],cwd=ROOT,timeout=10)
+                subprocess.run([sys.executable,"tools/build_capsule_cache.py","--quiet","--node",nid],cwd=ROOT,timeout=10,creationflags=_NO_WINDOW)
         except Exception:
-            subprocess.run([sys.executable,"tools/build_brain_search_index.py","--quiet"],cwd=ROOT)
+            subprocess.run([sys.executable,"tools/build_brain_search_index.py","--quiet"],cwd=ROOT,creationflags=_NO_WINDOW)
     event({"event":"sync","changed":paths[:100],"full_rebuild":bool(structural)})
+    _logic_cascade(paths)
+
+
+def _logic_cascade(paths):
+    """Guarded: if a domain-logic file changed, re-learn/regenerate/re-wire it (Pandidakterion cascade)."""
+    try:
+        from bi_cascade import cascade
+        report = cascade(ROOT, paths)
+        if report.get("triggered"):
+            event({"event": "logic-cascade", "province": report.get("province"),
+                   "changed": report.get("changed"), "recorded_units": report.get("recorded_units")})
+    except Exception:
+        pass
 
 
 def once():
@@ -74,9 +91,9 @@ def watch():
 def status():
     print("# Incremental Brain Daemon")
     if PID.exists():
-        pid=PID.read_text().strip(); alive=False
-        try: os.kill(int(pid),0); alive=True
-        except Exception: pass
+        pid=PID.read_text().strip()
+        try: alive=pid_is_alive(int(pid))
+        except ValueError: alive=False
         print(f"pid: {pid}"); print(f"running: {'yes' if alive else 'no'}")
     else: print("running: no")
 

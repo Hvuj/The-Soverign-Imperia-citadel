@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(PYTHONPATH=src python -m pytest tests/ -k \"path or config or init or home\" -q)",
+      "Bash(xargs grep -l \"resolve_home\\\\|HOME_DIR_NAME\\\\|citadel-home\")",
+      "Bash(PYTHONPATH=src python -m pytest tests/test_config_toml.py -q)",
+      "Bash(gh repo *)",
+      "Bash(git push *)"
+    ]
+  }
+}

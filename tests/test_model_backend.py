@@ -82,3 +82,29 @@ def test_resolve_gguf_raises_filenotfound_not_nameerror():
     backend = mb.get_backend()
     with pytest.raises(FileNotFoundError):
         backend._resolve_gguf_path("definitely-not-a-real-model.gguf")
+
+
+def test_detect_hardware_reports_present_gpu():
+    """On a host with an NVIDIA GPU, auto-discovery reports >=1 GPU and selects GPU offload (discovery→usage).
+    Skips on CPU-only hosts so CI stays green."""
+    if not mb._probe_nvidia_gpus():
+        pytest.skip("no NVIDIA GPU on this host")
+    hw = mb.detect_hardware()
+    assert hw.gpu_count >= 1
+    assert hw.device in (mb.BackendDevice.CUDA_FULL, mb.BackendDevice.CUDA_SPLIT)
+    assert hw.vram_gb > 0
+    assert mb._select_model_spec(hw).n_gpu_layers != 0  # discovered GPU is actually put to use
+
+
+def test_gpu_count_follows_probe_when_torchless(monkeypatch):
+    """Without torch, gpu_count must equal the number of nvidia-smi rows ('1 or more' GPUs)."""
+    class _Proc:
+        returncode = 0
+        stdout = "16384, NVIDIA RTX 5080\n24564, NVIDIA RTX 4090\n"
+
+    monkeypatch.setattr("shutil.which", lambda _n: "nvidia-smi")
+    monkeypatch.setattr("subprocess.run", lambda *a, **k: _Proc())
+    monkeypatch.setitem(sys.modules, "torch", None)  # force the nvidia-smi path
+    hw = mb.detect_hardware()
+    assert hw.gpu_count == 2
+    assert hw.device in (mb.BackendDevice.CUDA_FULL, mb.BackendDevice.CUDA_SPLIT)

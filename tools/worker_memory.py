@@ -42,6 +42,21 @@ def _already_indexed(run_id: str, task_id: str) -> bool:
     return f"/{task_id}.md" in path.read_text(encoding="utf-8")
 
 
+def _bridge_to_brain(task, model, effort, status, what_worked, what_did_not_work) -> None:
+    """Best-effort: every legion worker's outcome also folds into the shared brain ledger (System 3), so
+    every model that runs learns into the one brain. Never fatal to the worker."""
+    try:
+        from _learning_bridge import record_outcome
+
+        success = str(status).lower() in ("pass", "passed", "ok", "success", "done", "complete")
+        identity = f"{model}#{effort}" if effort else (model or "worker")
+        summary = (what_worked if success else what_did_not_work) or ""
+        record_outcome(task, identity, success=success,
+                       category="worked" if success else "failed", summary=summary[:200])
+    except Exception:
+        pass
+
+
 def write_task_card(
     run_id: str,
     *,
@@ -103,6 +118,7 @@ updated_at: {time.time()}
     rel = card_path.relative_to(workers_dir(run_id).parent).as_posix()
     if not _already_indexed(run_id, tid):
         append_index_line(run_id, f"- `{rel}` — {worker_id} / {company_id} ({status})")
+    _bridge_to_brain(task, model, effort, status, what_worked, what_did_not_work)
     return card_path
 
 

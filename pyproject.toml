@@ -14,7 +14,22 @@ authors = [
 
 license = "GPL-3.0-or-later"
 
-dependencies = []
+dependencies = [
+  "pydantic>=2",
+  "pydantic-settings>=2",
+  "anthropic>=0.116.0",
+  "watchdog>=6.0.0",
+  "matplotlib>=3.11.0",
+  "PyYAML>=6.0.3",
+  "redis>=5",
+  "numpy>=1.26",
+  "httpx[http2]>=0.27",
+  "h2>=4",
+  "mcp>=1.27,<2",
+  "openai>=1.40",
+  "python-dotenv>=1.0",
+  "truststore>=0.9",
+]
 
 classifiers = [
   "Development Status :: 3 - Alpha",
@@ -29,14 +44,10 @@ ai = ["anthropic>=0.116.0"]
 daemons = ["watchdog>=6.0.0"]
 reports = ["matplotlib>=3.11.0"]
 obsidian = ["PyYAML>=6.0.3", "watchdog>=6.0.0"]
-# Zero-Token Sovereign: dense retrieval (Redis Stack vector store + NumPy-accelerated cosine).
-# All optional — the retrieval layer degrades to a pure-Python on-disk vector file when absent.
-# httpx gives the Ollama round-trips a pooled keep-alive connection (falls back to stdlib urllib if absent).
 retrieval = ["redis>=5", "numpy>=1.26", "httpx>=0.27"]
-# Our own MCP retrieval server on the official SDK (stable v1.x line; v2 is pre-release).
 mcp = ["mcp>=1.27,<2"]
-# Opt-in HTTP/2 for the Ollama client (CITADEL_OLLAMA_HTTP2=1). Off by default — Ollama has no localhost h2c.
 http2 = ["httpx[http2]>=0.27", "h2>=4"]
+providers = ["openai>=1.40", "python-dotenv>=1.0", "truststore>=0.9"]
 all = [
   "anthropic>=0.116.0",
   "watchdog>=6.0.0",
@@ -46,6 +57,9 @@ all = [
   "numpy>=1.26",
   "httpx>=0.27",
   "mcp>=1.27,<2",
+  "openai>=1.40",
+  "python-dotenv>=1.0",
+  "truststore>=0.9",
 ]
 
 [project.scripts]
@@ -97,6 +111,8 @@ test = [
 [tool.uv]
 package = true
 default-groups = ["dev"]
+# Trust the OS/corporate cert store for HTTPS — without this, uv fails with UnknownIssuer behind the proxy.
+system-certs = true
 
 [tool.ruff]
 line-length = 120

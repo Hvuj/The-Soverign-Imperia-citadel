@@ -15,11 +15,12 @@ match, so it is inherently identity-checked — it can never signal an unrelated
 process that merely reused a stale PID.
 """
 
-import contextlib
 import os
 import signal
-import subprocess
+import sys
 import time
+
+from citadel._process import iter_process_command_lines, pid_is_alive
 
 GRACE_SECS = 3.0
 
@@ -31,6 +32,7 @@ Citadel_DAEMON_STEMS: tuple[str, ...] = (
     "ram_cache_daemon",
     "bug_record_daemon",
     "zombie_worker_daemon",
+    "embedder_daemon",
     "obsidian_intent_daemon",
     "citadel_ui_server",
 )
@@ -48,33 +50,47 @@ def find_citadel_daemon_procs(exclude_pids: set[int] | None = None) -> list[tupl
     """
     exclude = set(exclude_pids or ())
     exclude.add(os.getpid())
-    try:
-        result = subprocess.run(
-            ["ps", "-axo", "pid=,args="],
-            capture_output=True,
-            timeout=5,
-            text=True,
-        )
-    except (OSError, subprocess.TimeoutExpired):
-        return []
-
     found: list[tuple[int, str]] = []
-    for line in result.stdout.splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            pid_str, args = line.split(maxsplit=1)
-            pid = int(pid_str)
-        except ValueError:
-            continue
+    for pid, args in iter_process_command_lines():
         if pid in exclude:
             continue
+        normalized_args = args.lower().replace("\\", "/")
         for stem in Citadel_DAEMON_STEMS:
-            if stem in args and ("citadel" in args.lower() or "/tools/" in args):
+            if f"/tools/{stem}.py" in normalized_args:
                 found.append((pid, stem))
                 break
     return found
+
+
+def _terminate_process(pid: int, *, force: bool = False) -> bool:
+    """Terminate *pid* (or its POSIX process group) on this platform."""
+    if pid <= 0:
+        return False
+    if sys.platform == "win32":
+        # Windows has neither os.getpgid/os.killpg nor SIGKILL.  SIGTERM is
+        # implemented by TerminateProcess, so it is already the forceful path.
+        try:
+            os.kill(pid, signal.SIGTERM)
+            return True
+        except (ProcessLookupError, PermissionError, OSError):
+            return False
+
+    sig = signal.SIGKILL if force else signal.SIGTERM
+    try:
+        os.killpg(os.getpgid(pid), sig)
+        return True
+    except (ProcessLookupError, PermissionError):
+        try:
+            os.kill(pid, sig)
+            return True
+        except (ProcessLookupError, PermissionError):
+            return False
+    except OSError:
+        try:
+            os.kill(pid, sig)
+            return True
+        except OSError:
+            return False
 
 
 def terminate_pid(pid: int, grace: float = GRACE_SECS) -> bool:
@@ -83,41 +99,16 @@ def terminate_pid(pid: int, grace: float = GRACE_SECS) -> bool:
     Returns True if a signal was successfully delivered (the process existed).
     Shared by ``down.py``'s per-pidfile stop path and the global scan here.
     """
-    killed = False
-    try:
-        pgid = os.getpgid(pid)
-        os.killpg(pgid, signal.SIGTERM)
-        killed = True
-    except (ProcessLookupError, PermissionError):
-        try:
-            os.kill(pid, signal.SIGTERM)
-            killed = True
-        except (ProcessLookupError, PermissionError):
-            pass
-    except OSError:
-        try:
-            os.kill(pid, signal.SIGTERM)
-            killed = True
-        except ProcessLookupError:
-            pass
-
-    if not killed:
+    if not _terminate_process(pid):
         return False
 
     deadline = time.monotonic() + grace
     while time.monotonic() < deadline:
-        try:
-            os.kill(pid, 0)
-            time.sleep(0.1)
-        except (ProcessLookupError, PermissionError):
+        if not pid_is_alive(pid):
             return True
+        time.sleep(0.1)
     else:
-        try:
-            pgid = os.getpgid(pid)
-            os.killpg(pgid, signal.SIGKILL)
-        except OSError:
-            with contextlib.suppress(OSError):
-                os.kill(pid, signal.SIGKILL)
+        _terminate_process(pid, force=True)
     return True
 
 
@@ -134,37 +125,20 @@ def terminate_many(pids: list[int], grace: float = GRACE_SECS) -> set[int]:
     """
     signaled: set[int] = set()
     for pid in pids:
-        try:
-            pgid = os.getpgid(pid)
-            os.killpg(pgid, signal.SIGTERM)
+        if _terminate_process(pid):
             signaled.add(pid)
-        except (ProcessLookupError, PermissionError):
-            continue
-        except OSError:
-            try:
-                os.kill(pid, signal.SIGTERM)
-                signaled.add(pid)
-            except ProcessLookupError:
-                pass
 
     deadline = time.monotonic() + grace
     remaining = set(signaled)
     while remaining and time.monotonic() < deadline:
         for pid in list(remaining):
-            try:
-                os.kill(pid, 0)
-            except (ProcessLookupError, PermissionError):
+            if not pid_is_alive(pid):
                 remaining.discard(pid)
         if remaining:
             time.sleep(0.1)
 
     for pid in remaining:
-        try:
-            pgid = os.getpgid(pid)
-            os.killpg(pgid, signal.SIGKILL)
-        except OSError:
-            with contextlib.suppress(OSError):
-                os.kill(pid, signal.SIGKILL)
+        _terminate_process(pid, force=True)
 
     return signaled
 
