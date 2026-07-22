@@ -8,9 +8,10 @@ from citadel.commands import consensus
 @pytest.fixture(autouse=True)
 def _no_keys(monkeypatch):
     monkeypatch.delenv("GROK_API_KEY", raising=False)
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
     monkeypatch.delenv("NVIDIA_API_KEY", raising=False)
-    import citadel.services.execute.providers.keys as keys
-    monkeypatch.setattr(keys, "_loaded", True)  # don't load a real .env
+    import citadel.config as cfg
+    monkeypatch.setattr(cfg, "_env_loaded", True, raising=False)  # don't load a real .env
 
 
 def test_consensus_reports_when_no_models(tmp_path, capsys):

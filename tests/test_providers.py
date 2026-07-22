@@ -33,11 +33,11 @@ class FakeOpenAI:
 
 @pytest.fixture(autouse=True)
 def _clean_env(monkeypatch):
-    monkeypatch.delenv("GROK_API_KEY", raising=False)
-    monkeypatch.delenv("NVIDIA_API_KEY", raising=False)
-    # prevent .env on disk from leaking a real key into these tests
-    import citadel.services.execute.providers.keys as keys
-    monkeypatch.setattr(keys, "_loaded", True, raising=False)
+    for var in ("GROK_API_KEY", "GROQ_API_KEY", "NVIDIA_API_KEY", "ANTHROPIC_API_KEY"):
+        monkeypatch.delenv(var, raising=False)
+    # prevent .env on disk from leaking a real key into these hermetic tests (loader lives in citadel.config)
+    import citadel.config as cfg
+    monkeypatch.setattr(cfg, "_env_loaded", True, raising=False)
 
 
 def test_key_resolution_precedence(monkeypatch):
@@ -53,8 +53,14 @@ def test_masked_never_leaks_the_key():
 
 
 def test_registry_specs_and_defaults():
-    groq = provider_spec("groq")
-    assert groq.base_url == "https://api.groq.com/openai/v1" and groq.key_env == "GROK_API_KEY"
+    grok = provider_spec("grok")  # xAI — GROK_API_KEY targets api.x.ai
+    assert grok.base_url == "https://api.x.ai/v1"
+    assert grok.key_env == "GROK_API_KEY"
+    assert grok.egress_domain == "api.x.ai"
+    assert grok.default_model("text") == "grok-4-latest"
+    groq = provider_spec("groq")  # Groq (distinct company) — its own GROQ_API_KEY
+    assert groq.base_url == "https://api.groq.com/openai/v1"
+    assert groq.key_env == "GROQ_API_KEY"
     nvidia = provider_spec("nvidia")
     assert nvidia.default_model("text") and nvidia.default_model("vision") and nvidia.default_model("image")
     assert nvidia.egress_domain == "integrate.api.nvidia.com"
@@ -93,9 +99,18 @@ def test_executor_without_key_errors_not_crashes():
 
 
 def test_build_provider_executor_none_without_key_and_built_with_key(monkeypatch):
-    assert build_provider_executor("groq") is None  # no key → None (graceful skip)
-    monkeypatch.setenv("GROK_API_KEY", "k")
-    ex = build_provider_executor("groq")
-    assert ex is not None and ex.provider == "groq" and ex.model == "openai/gpt-oss-120b"
+    assert build_provider_executor("grok") is None  # no key → None (graceful skip)
+    # GROK_API_KEY builds the xAI grok provider (api.x.ai), NOT groq (which needs GROQ_API_KEY).
+    monkeypatch.setenv("GROK_API_KEY", "xai-k")
+    grok = build_provider_executor("grok")
+    assert grok is not None
+    assert grok.provider == "grok"
+    assert grok.model == "grok-4-latest"
+    assert build_provider_executor("groq") is None  # groq still unavailable — different key
+    monkeypatch.setenv("GROQ_API_KEY", "groq-k")
+    groq = build_provider_executor("groq")
+    assert groq is not None
+    assert groq.provider == "groq"
+    assert groq.model == "openai/gpt-oss-120b"
     with pytest.raises(ValueError):
         build_provider_executor("does-not-exist")

@@ -94,9 +94,11 @@ class OllamaEngine(LocalEngine):
         http_get: Callable[[str, float], dict] | None = None,
         timeout: float = 120.0,
     ) -> None:
-        # Default to CITADEL_OLLAMA_HOST when set (e.g. http://host.docker.internal:11434 inside a container),
-        # else localhost. An explicit `host=` argument always wins.
-        resolved = host or os.environ.get("CITADEL_OLLAMA_HOST") or "http://localhost:11434"
+        # Default to the CITADEL_OLLAMA_HOST setting (e.g. http://host.docker.internal:11434 inside a
+        # container), else localhost. An explicit `host=` argument always wins.
+        from citadel.config import get_settings
+
+        resolved = host or get_settings().ollama_host
         self._host = resolved.rstrip("/")
         self._http_post = http_post or _default_http_post
         self._http_get = http_get or _default_http_get
@@ -118,7 +120,8 @@ class OllamaEngine(LocalEngine):
             options["num_gpu"] = spec.n_gpu_layers
         payload = {"model": spec.model, "prompt": prompt, "stream": False, "options": options}
         result = self._http_post(f"{self._host}/api/generate", payload, self._timeout)
-        return str(result.get("response", "")).strip()
+        # `or ""` so a null/missing response yields "" (not the literal string "None").
+        return str(result.get("response") or "").strip()
 
     def embed(self, texts: list[str], model: str) -> list[list[float]]:
         """Batch via /api/embed; fall back to per-text /api/embeddings on older Ollama builds."""

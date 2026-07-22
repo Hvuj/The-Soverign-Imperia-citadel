@@ -47,10 +47,10 @@ class RetrievalService:
 
     @classmethod
     def for_workspace(cls, workspace: str | Path, *, engine=None, embed_model: str | None = None) -> "RetrievalService":
-        import os
+        from citadel.config import get_settings
 
         ws = Path(workspace)
-        model = embed_model or os.environ.get("CITADEL_EMBED_MODEL", _DEFAULT_EMBED_MODEL)
+        model = embed_model or get_settings().embed_model
         state = ws / ".claude" / "state" / "retrieval"
         if engine is None:
             from citadel.services.execute.local.engine import OllamaEngine

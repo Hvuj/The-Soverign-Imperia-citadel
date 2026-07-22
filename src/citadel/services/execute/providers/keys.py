@@ -7,7 +7,6 @@ gracefully. Keys are never printed — only a masked form (`sk-…abcd`) is ever
 
 import os
 
-_loaded = False
 _tls_ready = False
 
 
@@ -30,28 +29,29 @@ def ensure_tls() -> None:
 
 
 def load_env(explicit_path: str | None = None) -> None:
-    """Load `.env` into the process environment once (no override of already-set vars)."""
-    global _loaded
-    if _loaded:
-        return
-    try:
-        from dotenv import find_dotenv, load_dotenv
+    """Load `.env` into the process environment once. Thin shim — the loader now lives in
+    `citadel.config.ensure_dotenv_loaded()` so pydantic settings and key resolution share one code path."""
+    from citadel.config import ensure_dotenv_loaded
 
-        path = explicit_path or os.environ.get("CITADEL_DOTENV") or find_dotenv(usecwd=True)
-        if path:
-            load_dotenv(path, override=False)
-    except Exception:
-        pass
-    _loaded = True
+    if explicit_path:
+        os.environ.setdefault("CITADEL_DOTENV", explicit_path)
+    ensure_dotenv_loaded()
 
 
 def resolve_provider_key(env_var: str, *, explicit: str | None = None) -> str | None:
-    """Return the API key for `env_var` (explicit > env > .env), or None if unset."""
+    """Return the API key for `env_var` (explicit > CitadelSettings/env/.env), or None if unset.
+
+    Modeled keys (`GROK_API_KEY`, `GROQ_API_KEY`, `NVIDIA_API_KEY`, `ANTHROPIC_API_KEY`) resolve through the
+    typed pydantic settings; any other var falls back to the (`.env`-loaded) process environment."""
     if explicit:
         return explicit
-    load_env()
-    key = os.environ.get(env_var)
-    return key or None
+    from citadel.config import get_settings
+
+    settings = get_settings()
+    field = env_var.lower()
+    if field in type(settings).model_fields:
+        return getattr(settings, field) or None
+    return os.environ.get(env_var) or None
 
 
 def masked(key: str | None) -> str:

@@ -21,7 +21,7 @@ _SENSITIVE = re.compile(
     r"|(?:^|[\s/\\])\.env(?:\.[\w.]+)?\b|(?:^|[\s/\\])secrets?\.(?:json|ya?ml|toml|env)|(?:^|[\s/\\])private/)"
 )
 
-_ALLOWED_HOSTS = {"api.groq.com", "integrate.api.nvidia.com", "ai.api.nvidia.com"}
+_ALLOWED_HOSTS = {"api.x.ai", "api.groq.com", "integrate.api.nvidia.com", "ai.api.nvidia.com"}
 
 
 def contains_sensitive(text: str) -> str | None:

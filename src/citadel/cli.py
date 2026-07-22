@@ -324,16 +324,17 @@ def _cmd_chat(args: argparse.Namespace) -> int:
     substantive ones the capable coder model. Nothing reaches Claude unless you type an explicit
     `/task <desc>`, which escalates that single turn to Claude Opus (and costs tokens).
     """
-    import os
     import re
     import sys
     from pathlib import Path
 
+    from citadel.config import get_settings
     from citadel.services.execute.local.engine import OllamaEngine, RunSpec
 
     _ = Path(args.workspace).resolve() if getattr(args, "workspace", None) else Path.cwd()
-    deep = getattr(args, "model", None) or os.environ.get("CITADEL_OLLAMA_MODEL", "qwen2.5-coder:7b")
-    fast = getattr(args, "fast_model", None) or os.environ.get("CITADEL_CHAT_FAST_MODEL", "qwen2.5:0.5b")
+    settings = get_settings()
+    deep = getattr(args, "model", None) or settings.ollama_model
+    fast = getattr(args, "fast_model", None) or settings.chat_fast_model
 
     engine = OllamaEngine()
     if not engine.available():

@@ -343,7 +343,9 @@ def resolve_redis_url(ws: Path | None = None, *, explicit: str | None = None) ->
     """
     if explicit:
         return explicit
-    env = os.environ.get("CITADEL_REDIS_URL")
+    from citadel.config import get_settings
+
+    env = get_settings().redis_url  # CITADEL_REDIS_URL via typed settings (None when unset)
     if env:
         return env
     try:

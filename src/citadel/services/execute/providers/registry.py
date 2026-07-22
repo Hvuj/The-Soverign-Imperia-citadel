@@ -1,8 +1,10 @@
 """registry.py — the provider catalog: endpoints, key env vars, and recommended models by modality.
 
-One `nvapi-` NVIDIA key unlocks the whole catalog; one Groq key unlocks all Groq models. `egress_domain`
-is the single host each provider is allowed to talk to (the cloud-egress allowlist). Model IDs evolve on the
-providers' catalogs — these are the recommended defaults; override per call or in config.
+One `nvapi-` NVIDIA key unlocks the whole NVIDIA catalog; one xAI key unlocks Grok; one Groq key unlocks
+Groq's models. `egress_domain` is the single host each provider is allowed to talk to (the cloud-egress
+allowlist). NOTE: `GROK_API_KEY` is an **xAI** key (api.x.ai) — the `grok` provider — NOT Groq
+(api.groq.com), which uses its own `GROQ_API_KEY`. Model IDs evolve on the providers' catalogs — these are
+the recommended defaults; override per call or in config.
 """
 
 from dataclasses import dataclass, field
@@ -25,10 +27,19 @@ class ProviderSpec:
         return models[0] if models else None
 
 
+GROK = ProviderSpec(
+    name="grok",
+    base_url="https://api.x.ai/v1",  # xAI's OpenAI-compatible endpoint
+    key_env="GROK_API_KEY",          # the xAI grok-developer-program key in the user's .env
+    egress_domain="api.x.ai",
+    # Valid current model IDs (verified against api.x.ai: grok-2/grok-beta are retired, grok-3/grok-4 exist).
+    text_models=("grok-4-latest", "grok-3", "grok-3-mini"),
+)
+
 GROQ = ProviderSpec(
     name="groq",
     base_url="https://api.groq.com/openai/v1",
-    key_env="GROK_API_KEY",  # the var already in the user's .env
+    key_env="GROQ_API_KEY",  # distinct from GROK_API_KEY (xAI); absent → groq stays unavailable
     egress_domain="api.groq.com",
     text_models=("openai/gpt-oss-120b", "openai/gpt-oss-20b"),
 )
@@ -50,7 +61,7 @@ NVIDIA = ProviderSpec(
     image_models=("black-forest-labs/flux.1-dev", "stabilityai/stable-diffusion-xl"),
 )
 
-PROVIDERS: dict[str, ProviderSpec] = {"groq": GROQ, "nvidia": NVIDIA}
+PROVIDERS: dict[str, ProviderSpec] = {"grok": GROK, "groq": GROQ, "nvidia": NVIDIA}
 
 
 def provider_spec(name: str) -> ProviderSpec | None:

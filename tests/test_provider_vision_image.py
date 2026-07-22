@@ -36,8 +36,8 @@ def test_describe_image_builds_multimodal_message(tmp_path, monkeypatch):
 
 def test_describe_image_none_without_key(tmp_path, monkeypatch):
     monkeypatch.delenv("NVIDIA_API_KEY", raising=False)
-    import citadel.services.execute.providers.keys as keys
-    monkeypatch.setattr(keys, "_loaded", True)  # don't load a real .env
+    import citadel.config as cfg
+    monkeypatch.setattr(cfg, "_env_loaded", True, raising=False)  # don't load a real .env
     img = tmp_path / "pic.png"
     img.write_bytes(_PNG)
     assert describe_image(img, client=_VisionClient()) is None
@@ -81,6 +81,6 @@ def test_generate_image_redacts_prompt(tmp_path, monkeypatch):
 
 def test_generate_image_none_without_key(tmp_path, monkeypatch):
     monkeypatch.delenv("NVIDIA_API_KEY", raising=False)
-    import citadel.services.execute.providers.keys as keys
-    monkeypatch.setattr(keys, "_loaded", True)
+    import citadel.config as cfg
+    monkeypatch.setattr(cfg, "_env_loaded", True, raising=False)
     assert generate_image("x", tmp_path / "g.png", http_post=lambda *a: {}) is None
